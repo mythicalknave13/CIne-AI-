@@ -945,53 +945,29 @@ def mix_audio_tracks(
     mixed_path = output_dir / "mixed_audio.wav"
     total_duration = float(target_duration_seconds or settings.film_duration_seconds)
     fade_out_start = max(total_duration - FINAL_AUDIO_FADE_OUT_SECONDS, 0.0)
-    ambient_shape_expr = _volume_shape_expression(silence_windows, muted_value=AMBIENT_PAUSE_VOLUME)
     music_shape_expr = _volume_shape_expression(silence_windows, muted_value=MUSIC_PAUSE_VOLUME)
-    inputs = [
+    command = [
         "ffmpeg",
         "-y",
         "-i",
         str(narration_path),
-    ]
-    if ambient_path is not None:
-        inputs.extend(["-i", str(ambient_path)])
-    inputs.extend(["-stream_loop", "-1", "-i", str(music_path)])
-
-    if ambient_path is not None:
-        filter_complex = (
+        "-stream_loop",
+        "-1",
+        "-i",
+        str(music_path),
+        "-filter_complex",
+        (
             f"[0:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
             f"highpass=f=120,acompressor=threshold=0.05:ratio=3:attack=5:release=50,"
             f"volume=1.2,atrim=0:{total_duration}[voice];"
             f"[1:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-            f"highpass=f=80,lowpass=f=8000,volume=0.15,atrim=0:{total_duration},volume='{ambient_shape_expr}'[amb_raw];"
-            f"[amb_raw][voice]sidechaincompress=threshold=0.02:ratio=6:attack=20:release=200:level_sc=0.5"
-            f"[ambient];"
-            f"[2:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-            f"highpass=f=100,lowpass=f=6000,volume=0.15,atrim=0:{total_duration},volume='{music_shape_expr}'[mus_raw];"
-            f"[mus_raw][voice]sidechaincompress=threshold=0.02:ratio=6:attack=40:release=350:level_sc=0.5"
-            f"[mus];"
-            f"[voice][ambient][mus]amix=inputs=3:duration=first:dropout_transition=3,"
-            f"highpass=f=60,alimiter=limit=0.9,"
-            f"afade=t=in:st=0:d={FINAL_AUDIO_FADE_IN_SECONDS},"
-            f"afade=t=out:st={fade_out_start}:d={FINAL_AUDIO_FADE_OUT_SECONDS}[out]"
-        )
-    else:
-        filter_complex = (
-            f"[0:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-            f"highpass=f=120,acompressor=threshold=0.05:ratio=3:attack=5:release=50,"
-            f"volume=1.2,atrim=0:{total_duration}[voice];"
-            f"[1:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-            f"highpass=f=100,lowpass=f=6000,volume=0.15,atrim=0:{total_duration},volume='{music_shape_expr}'[mus_raw];"
-            f"[mus_raw][voice]sidechaincompress=threshold=0.02:ratio=6:attack=40:release=350:level_sc=0.5"
-            f"[mus];"
+            f"highpass=f=100,lowpass=f=6000,volume=0.18,atrim=0:{total_duration},volume='{music_shape_expr}'[mus_raw];"
+            f"[mus_raw][voice]sidechaincompress=threshold=0.02:ratio=6:attack=40:release=350:level_sc=0.5[mus];"
             f"[voice][mus]amix=inputs=2:duration=first:dropout_transition=3,"
             f"highpass=f=60,alimiter=limit=0.9,"
             f"afade=t=in:st=0:d={FINAL_AUDIO_FADE_IN_SECONDS},"
             f"afade=t=out:st={fade_out_start}:d={FINAL_AUDIO_FADE_OUT_SECONDS}[out]"
-        )
-    command = inputs + [
-        "-filter_complex",
-        filter_complex,
+        ),
         "-map",
         "[out]",
         "-ac",
@@ -1013,33 +989,21 @@ def mix_audio_tracks(
             "-y",
             "-i",
             str(narration_path),
+            "-stream_loop",
+            "-1",
+            "-i",
+            str(music_path),
         ]
-        if ambient_path is not None:
-            fallback_inputs.extend(["-i", str(ambient_path)])
-        fallback_inputs.extend(["-stream_loop", "-1", "-i", str(music_path)])
-
-        if ambient_path is not None:
-            fallback_filter = (
-                f"[0:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-                f"volume={settings.narration_volume}[voice];"
-                f"[1:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-                f"volume={AMBIENT_BASE_VOLUME},volume='{ambient_shape_expr}'[ambient];"
-                f"[2:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-                f"volume={max(settings.music_volume, 0.12)},volume='{music_shape_expr}'[music];"
-                f"[voice][ambient][music]amix=inputs=3:duration=first:dropout_transition=3,"
-                f"afade=t=in:st=0:d={FINAL_AUDIO_FADE_IN_SECONDS},"
-                f"afade=t=out:st={fade_out_start}:d={FINAL_AUDIO_FADE_OUT_SECONDS}[out]"
-            )
-        else:
-            fallback_filter = (
-                f"[0:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-                f"volume={settings.narration_volume}[voice];"
-                f"[1:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
-                f"volume={max(settings.music_volume, 0.12)},volume='{music_shape_expr}'[music];"
-                f"[voice][music]amix=inputs=2:duration=first:dropout_transition=3,"
-                f"afade=t=in:st=0:d={FINAL_AUDIO_FADE_IN_SECONDS},"
-                f"afade=t=out:st={fade_out_start}:d={FINAL_AUDIO_FADE_OUT_SECONDS}[out]"
-            )
+        fallback_filter = (
+            f"[0:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
+            f"highpass=f=120,volume=1.1[voice];"
+            f"[1:a]aformat=sample_fmts=fltp:sample_rates={settings.audio_sample_rate}:channel_layouts=stereo,"
+            f"highpass=f=100,lowpass=f=6000,volume=0.16,volume='{music_shape_expr}'[music];"
+            f"[voice][music]amix=inputs=2:duration=first:dropout_transition=3,"
+            f"highpass=f=60,alimiter=limit=0.9,"
+            f"afade=t=in:st=0:d={FINAL_AUDIO_FADE_IN_SECONDS},"
+            f"afade=t=out:st={fade_out_start}:d={FINAL_AUDIO_FADE_OUT_SECONDS}[out]"
+        )
         subprocess.run(
             fallback_inputs + [
                 "-filter_complex",

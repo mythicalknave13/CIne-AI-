@@ -65,6 +65,7 @@ def _create_ken_burns_clip(
             preset="fast",
             movflags="+faststart",
             r=fps,
+            an=None,
         )
         .overwrite_output()
         .run(quiet=True)
@@ -141,6 +142,7 @@ def create_black_card(
             preset="fast",
             movflags="+faststart",
             r=fps,
+            an=None,
         )
         .overwrite_output()
         .run(quiet=True)
@@ -185,6 +187,7 @@ def _prepare_existing_video_clip(
             movflags="+faststart",
             r=fps,
             t=duration_seconds,
+            an=None,
         )
         .overwrite_output()
         .run(quiet=True)
@@ -539,23 +542,7 @@ def assemble_video(
     if progress_callback:
         progress_callback("Assembling final film…", 92)
 
-    ordered_video_paths = list(intro_paths)
-    transition_map = {int(k): float(v) for k, v in (transition_after or {}).items()}
-    for index, clip_path in enumerate(clip_paths, start=1):
-        ordered_video_paths.append(clip_path)
-        transition_duration = float(transition_map.get(index, 0.0))
-        if transition_duration > 0 and index < len(clip_paths):
-            transition_path = clip_dir / f"transition_{index:02d}_{index + 1:02d}.mp4"
-            _create_xfade_transition_clip(
-                clip_path,
-                clip_paths[index],
-                transition_path,
-                duration_seconds=transition_duration,
-                width=1280,
-                height=720,
-                fps=24,
-            )
-            ordered_video_paths.append(transition_path)
+    ordered_video_paths = list(intro_paths) + clip_paths
     final_path = output_dir / "final_film.mp4"
     concat_list_path = _write_concat_list(ordered_video_paths, output_dir)
     final_mux_start = time.perf_counter()

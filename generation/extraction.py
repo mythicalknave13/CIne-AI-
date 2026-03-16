@@ -1100,12 +1100,23 @@ def _enforce_character_bible_prompt(blueprint: Dict[str, Any], scene: Dict[str, 
     bible = re.sub(r"\s+", " ", str(blueprint.get("character_bible", "")).strip())
     style = re.sub(r"\s+", " ", str(blueprint.get("visual_style_anchor", "")).strip())
     prompt = re.sub(r"\s+", " ", str(scene.get("veo_prompt", "")).strip())
+    no_speech_clause = "No dialogue, no speech, no spoken words, no voices."
     if not prompt:
         return prompt
 
     if not bool(scene.get("has_character", False)):
         if style and style not in prompt:
             prompt = prompt.rstrip(". ") + ". " + style
+        if "no dialogue" not in prompt.lower():
+            if "no text" in prompt.lower():
+                prompt = re.sub(
+                    r"(?i)no text,\s*no subtitles",
+                    f"{no_speech_clause} No text, no subtitles",
+                    prompt,
+                    count=1,
+                )
+            else:
+                prompt = prompt.rstrip(". ") + f". {no_speech_clause}"
         if "no text" not in prompt.lower():
             prompt += " No text, no subtitles, no logos, no title cards."
         return re.sub(r"\s+", " ", prompt).strip()
@@ -1126,6 +1137,17 @@ def _enforce_character_bible_prompt(blueprint: Dict[str, Any], scene: Dict[str, 
 
     if style and style not in prompt:
         prompt = prompt.rstrip(". ") + ". " + style
+
+    if "no dialogue" not in prompt.lower():
+        if "no text" in prompt.lower():
+            prompt = re.sub(
+                r"(?i)no text,\s*no subtitles",
+                f"{no_speech_clause} No text, no subtitles",
+                prompt,
+                count=1,
+            )
+        else:
+            prompt = prompt.rstrip(". ") + f". {no_speech_clause}"
 
     if "no text" not in prompt.lower():
         prompt = f"{prompt} No text, no subtitles, no logos, no title cards."

@@ -68,7 +68,7 @@ from generation.scenes import (
     generate_scene_batch_interleaved,
 )
 from generation.veo_scenes import generate_all_veo_scenes
-from generation.video import assemble_video, build_ambient_audio_track, create_black_card, create_ken_burns_clip
+from generation.video import assemble_video, create_black_card, create_ken_burns_clip
 
 logger = logging.getLogger("uvicorn.error")
 settings = get_settings()
@@ -107,7 +107,7 @@ END_CARD_SECONDS = 4.0
 CINEMATIC_SCENE_SECONDS = 8.0
 MAJOR_STAGE_STAGGER_SECONDS = 2.0
 STILL_FALLBACK_STAGGER_SECONDS = 20.0
-SCENE_TRANSITIONS_AFTER = {1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5}
+SCENE_TRANSITIONS_AFTER: Dict[int, float] = {}
 SCENE_BLACK_PAUSES = {5: 3.0, 6: 2.0, 7: 2.0}
 SACRIFICE_SCENE_LEAD_INS = {
     1: 1.5,
@@ -1003,18 +1003,6 @@ async def _render_story(
     timeline_durations.append(END_CARD_SECONDS)
 
     ambient_path = None
-    try:
-        ambient_path = await asyncio.to_thread(
-            build_ambient_audio_track,
-            media_paths=timeline_media_paths,
-            media_has_native_audio=timeline_has_native_audio,
-            output_dir=audio_dir,
-            sample_rate=render_settings.audio_sample_rate,
-            media_durations=timeline_durations,
-            intro_duration_seconds=opening_card_duration,
-        )
-    except Exception as exc:
-        logger.warning("Ambient audio extraction failed for session %s: %s", session_id, exc)
 
     if narration_path and music_path:
         await _send_progress(ws, "Mixing audio tracks…", 90)
