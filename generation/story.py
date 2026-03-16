@@ -39,7 +39,6 @@ def _story_title(story_context: Dict[str, Any]) -> str:
 def _character_description(story_context: Dict[str, Any]) -> str:
     raw = (
         str(story_context.get("character_description", "")).strip()
-        or str(story_context.get("character_bible", "")).strip()
         or str(story_context.get("character", "")).strip()
         or str(story_context.get("character_essence", "")).strip()
         or str(story_context.get("who", "")).strip()
@@ -48,53 +47,93 @@ def _character_description(story_context: Dict[str, Any]) -> str:
 
 
 def _story_prompt(story_context: Dict[str, Any]) -> str:
-    character_desc = _character_description(story_context) or "an adult protagonist whose hands carry the story"
     who = str(story_context.get("who", story_context.get("character_essence", ""))).strip()
     turn = str(story_context.get("turn", story_context.get("the_turn", ""))).strip()
     remains = str(story_context.get("remains", story_context.get("residual_feeling", ""))).strip()
     return f"""You are CineAI, a cinematic visual storyteller.
 
-Create one 6-scene visual story with interleaved narration and images.
+You create intimate short stories by weaving narration
+and scene illustrations together in one flowing response.
 
-Story:
+THE USER'S STORY:
 Who: {who}
-Turn: {turn}
-Remains: {remains}
+What changed: {turn}
+What remains: {remains}
 
-Character description. Use these exact words whenever the character appears:
-{character_desc}
+Create a 6-scene illustrated story.
 
-Choose one thread object and show it in scenes 1, 4, and 6.
+CHARACTER:
+- Invent one specific character based on the user's
+  description
+- Give them a distinct, memorable face, specific age,
+  ethnicity, clothing, and physical presence
+- Keep this character VISUALLY IDENTICAL across every
+  image they appear in - same face, same clothes,
+  same body, same hair
+- You are generating all images in this single response
+  so maintain perfect visual consistency throughout
 
-Rules:
-- First person "I" voice only.
-- 5-12 words maximum per narration line.
-- Scene 2 must have no narration.
-- Scenes 1, 4, and 6 are close-up hands.
-- Scene 2 is wide and silent.
-- Scene 3 is medium from behind or profile.
-- Scene 5 is the emotional peak.
-- Every image must be cinematic 16:9 and photorealistic.
-- Warm earth tones, soft natural light, shallow depth of field, gentle film grain.
-- When the character appears, use the exact character description above.
-- Show only hands, silhouette, back, profile, or over-the-shoulder views.
-- Never show a clear frontal face with both eyes visible.
-- Keep one subject and one clear action per image.
+THREAD OBJECT:
+- Choose one small meaningful physical object that
+  appears throughout the story
+- Something the character makes, carries, or gives
+- It should be visible in scenes 1, 4, and 6
 
-Return the story in this exact sequence:
-1. Scene 1 narration text.
-2. Scene 1 image: close-up of hands doing the defining action, include the thread object.
-3. Scene 2 image only: wide establishing shot, character small in frame.
-4. Scene 3 narration text.
-5. Scene 3 image: medium shot from behind or profile, something changes in the world.
-6. Scene 4 narration text.
-7. Scene 4 image: close-up of hands holding the thread object, dramatic lighting.
-8. Scene 5 narration text or [silence].
-9. Scene 5 image: the emotional peak, profile or silhouette against dramatic light.
-10. Scene 6 narration text.
-11. Scene 6 image: mirror scene 1's framing, same warm light, echo of the thread object.
+NARRATION:
+- First person "I" voice - the character remembering
+- 5-12 words per line maximum
+- Sparse, poetic, like a single breath
+- Scene 2 has NO narration - just the image
+- Not every scene needs words. Silence is powerful.
 
-Do not add headings, scene numbers, bullet points, captions, or explanations. Alternate narration and images only."""
+VISUAL STYLE:
+- All images: cinematic, photorealistic, 16:9
+  composition
+- Warm natural lighting throughout
+- Shallow depth of field
+- Consistent color palette across all six scenes
+- Each image should feel like a frame from the same
+  film - same world, same light, same texture
+
+THE SIX SCENES:
+
+Scene 1 - WARMTH
+An intimate image. The character doing something
+that defines them. Show their face, their hands,
+the action. Include the thread object. Warm light.
+Write one narration line before the image.
+
+Scene 2 - THE WORLD
+Pull back. Show where this story lives. The character
+in their environment.
+No narration. Let the image breathe.
+
+Scene 3 - THE CRACK
+Something shifts. Show it in the character's
+expression, in the light, in a new presence or
+absence. The turn begins.
+Write one narration line.
+
+Scene 4 - THE WEIGHT
+The hardest moment. Show it on their face, in their
+body language, in how they hold the thread object -
+differently now.
+Write one narration line.
+
+Scene 5 - THE MOMENT
+The emotional peak. The most visually striking image.
+Whatever composition serves this moment - let the
+story decide.
+Write one line, or write [silence].
+
+Scene 6 - WHAT REMAINS
+Echo scene 1. Same warmth, but changed. The
+same character transformed, or the thread object
+alone, or the space they filled.
+Write the final line.
+
+Begin. Alternate between narration text and
+generated scene images."""
 
 
 def _clean_text_block(text: str) -> List[str]:
@@ -183,17 +222,46 @@ def generate_interleaved_story(
     output_dir.mkdir(parents=True, exist_ok=True)
     client = genai.Client(**vertex_client_kwargs(settings))
     prompt = _story_prompt(story_context)
-    try:
-        response = client.models.generate_content(
-            model=settings.conversation_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=[types.Modality.TEXT, types.Modality.IMAGE],
-                temperature=0.8,
-                image_config=types.ImageConfig(aspect_ratio="16:9"),
-            ),
-        )
-    except Exception as exc:
+    model_candidates = [settings.image_model]
+    if settings.image_model != "gemini-2.5-flash-preview-04-17":
+        model_candidates.append("gemini-2.5-flash-preview-04-17")
+    if settings.image_model != "gemini-2.5-flash-image":
+        model_candidates.append("gemini-2.5-flash-image")
+
+    last_error: Exception | None = None
+    response = None
+    for model_name in model_candidates:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=[types.Modality.TEXT, types.Modality.IMAGE],
+                    temperature=0.8,
+                ),
+            )
+            break
+        except Exception as exc:
+            last_error = exc
+            message = str(exc)
+            if "only supports text output" in message and model_name != "gemini-2.5-flash-preview-04-17":
+                logger.warning(
+                    "Interleaved story model %s returned text-only error, retrying with preview model.",
+                    model_name,
+                )
+                continue
+            if model_name != model_candidates[-1]:
+                logger.warning(
+                    "Interleaved story generation failed on model %s, trying fallback model. (%s)",
+                    model_name,
+                    exc,
+                )
+                continue
+            response = None
+            break
+
+    if response is None:
+        exc = last_error or RuntimeError("Interleaved story generation failed.")
         logger.warning("Interleaved story generation failed, using cached demo fallback. (%s)", exc)
         result = load_demo_story(story_context, output_dir)
         if scene_callback is not None:

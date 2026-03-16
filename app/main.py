@@ -43,8 +43,6 @@ from generation.audio import (
 from generation.cache import copy_cached_asset
 from generation.export import generate_storyboard_pdf
 from generation.extraction import (
-    classify_veo_safety,
-    enforce_character_bible,
     extract_conflict,
     extract_emotional_setup,
     extract_ending,
@@ -147,8 +145,8 @@ ENABLE_VEO = False
 # ── Opening greeting ─────────────────────────────────────────────────
 
 OPENING_MESSAGE = (
-    "Tell me about someone. Real or imagined. Who are they, and why do they matter?\n\n"
-    "Pick a preset to start from a story frame, or describe the person at the center of yours."
+    "Who do we follow? Real or imagined. Give me the one person at the center of this film.\n\n"
+    "Pick a preset to start from a story frame, or describe the protagonist you want to build around."
 )
 
 GENERIC_CHARACTER_SEEDS = {
@@ -679,7 +677,7 @@ async def _render_interleaved_story(
     session_dir.mkdir(parents=True, exist_ok=True)
     story_title = _story_title(story_ctx)
 
-    await _send_assistant(ws, "I have what I need. Let me make your story.", step=3)
+    await _send_assistant(ws, "I have what I need. Let me make your story.", step=5)
     await _generate_character_background(ws, session_id, story_ctx)
 
     try:
@@ -729,6 +727,7 @@ async def _render_interleaved_story(
     )
 
     scenes = list(interleaved.get("scenes", []) or [])[:INTERLEAVED_SCENE_COUNT]
+    story_parts = list(interleaved.get("story_parts", []) or [])
     if not scenes:
         raise ValueError("Gemini did not return any story images.")
 
@@ -758,19 +757,34 @@ async def _render_interleaved_story(
             await asyncio.sleep(0.1)
 
     narration_path: Path | None = None
+    narration_lines: List[str] = []
+    for part in story_parts:
+        if str(part.get("type", "")).strip().lower() != "narration":
+            continue
+        text = str(part.get("text", "")).strip()
+        if not text or text.startswith("**") or text.startswith("Scene"):
+            continue
+        if text.lower() == "[silence]":
+            continue
+        narration_lines.append(text)
+
+    narrator_profile = str(story_ctx.get("narrator_profile", "older_memory")).strip() or "older_memory"
     narration_scenes = [
         {
             "scene_number": idx,
-            "narration": str(scene.get("narration", "")).strip(),
-            "narrator_profile": str(story_ctx.get("narrator_profile", "older_memory")).strip() or "older_memory",
+            "narration": line,
+            "narrator_profile": narrator_profile,
+            "narration_ssml": (
+                "<speak>"
+                f'<break time="3000ms"/>'
+                f'<prosody rate="84%" pitch="-3st">{line}</prosody>'
+                f'<break time="2000ms"/>'
+                "</speak>"
+            ),
         }
-        for idx, scene in enumerate(scenes, start=1)
+        for idx, line in enumerate(narration_lines, start=1)
     ]
-    if any(
-        str(scene.get("narration", "")).strip()
-        and str(scene.get("narration", "")).strip().lower() != "[silence]"
-        for scene in scenes
-    ):
+    if narration_lines:
         await _send_progress(ws, "Recording the voiceover…", 72)
         try:
             narration_path = await asyncio.to_thread(
@@ -780,9 +794,10 @@ async def _render_interleaved_story(
                 output_dir=audio_dir,
                 intro_text="",
                 intro_duration_seconds=0.0,
-                scene_duration_seconds=6.0,
-                total_duration_seconds=max(24.0, len(scenes) * 6.0),
+                scene_duration_seconds=8.0,
+                total_duration_seconds=max(24.0, len(narration_lines) * 8.0),
                 preserve_intro_length=False,
+                respect_ssml_timing=True,
             )
             narration_url = _versioned_static_url(
                 f"/static/generated/{session_id}/audio/{narration_path.name}",
@@ -859,7 +874,7 @@ async def _render_story(
     render_start = time.perf_counter()
     assets: Dict[str, Any] = {}
     preset_name = str(story_ctx.get("preset_name", "")).strip().lower()
-    await _send_assistant(ws, "I have what I need. Rendering your film now.", step=2)
+    await _send_assistant(ws, "I have what I need. Rendering your film now.", step=5)
 
     stage_start = time.perf_counter()
     char_path = await _generate_character_background(ws, session_id, story_ctx)
@@ -873,7 +888,6 @@ async def _render_story(
         dict(story_ctx),
         settings,
     )
-    blueprint = enforce_character_bible(blueprint)
     full_script = [
         dict(scene)
         for scene in list(blueprint.get("scenes", []) or [])[:settings.scene_count]
@@ -893,7 +907,6 @@ async def _render_story(
         )
         full_script = [dict(scene) for scene in full_script[:settings.scene_count]]
         blueprint = {
-            "character_bible": str(story_ctx.get("character_bible", "")).strip(),
             "thread_object": str(story_ctx.get("thread_object_hint", "")).strip(),
             "visual_style_anchor": str(story_ctx.get("visual_style", "")).strip(),
             "music_segments": list(story_ctx.get("music_segments", []) or []),
@@ -903,8 +916,6 @@ async def _render_story(
             "scenes": [dict(scene) for scene in full_script],
         }
     story_ctx["film_blueprint"] = blueprint
-    if str(blueprint.get("character_bible", "")).strip():
-        story_ctx["character_bible"] = str(blueprint.get("character_bible", "")).strip()
     if str(blueprint.get("thread_object", "")).strip():
         story_ctx["thread_object_hint"] = str(blueprint.get("thread_object", "")).strip()
     if str(blueprint.get("visual_style_anchor", "")).strip():
@@ -1313,17 +1324,26 @@ async def _render_story(
         "storyboard_url": storyboard_url,
         "video_title": story_title,
     })
-    residual_feeling = re.sub(r"\s+", " ", str(story_ctx.get("residual_feeling", "")).strip())
+    residual_feeling = re.sub(
+        r"\s+",
+        " ",
+        str(
+            story_ctx.get("residual_feeling")
+            or story_ctx.get("resolution")
+            or story_ctx.get("ending")
+            or ""
+        ).strip(),
+    )
     closing_line = (
         f"Your film is ready. {residual_feeling}. Press play."
-        if residual_feeling
+        if residual_feeling and len(residual_feeling) <= 96
         else "Your film is ready. Press play."
     )
     await _send_assistant(
         ws,
         closing_line,
         film_ready=True,
-        step=3,
+        step=6,
         video_title=story_title,
     )
     logger.info("TIMING render_story complete total=%.2fs session=%s", time.perf_counter() - render_start, session_id)
@@ -1339,7 +1359,7 @@ async def handle_custom_intake(ws: WebSocket, session_id: str, user_input: str, 
         "music_preference": _resolve_music_preference(user_input, music_preference),
     }
     state_store.save(session_id, {
-        "current_beat": 2,
+        "current_beat": 5,
         "story_type": "custom",
         "story_context": story_ctx,
         "generated_assets": {},
@@ -1356,15 +1376,15 @@ async def handle_preset_intake(ws: WebSocket, session_id: str, user_input: str, 
     story_ctx["residual_feeling"] = user_input
     story_ctx["music_preference"] = _resolve_music_preference(user_input, music_preference)
     state_store.save(session_id, {
-        "current_beat": 2,
+        "current_beat": 5,
         "story_type": "preset",
         "story_context": story_ctx,
         "generated_assets": {},
     })
-    await _render_interleaved_story(ws, session_id, story_ctx, story_type="preset")
+    await _render_story(ws, session_id, story_ctx, story_type="preset")
 
 
-# ── Three-Beat Conversation Flow ────────────────────────────────────
+# ── Film-Oriented Five-Beat Conversation Flow ───────────────────────
 
 
 async def handle_step1_preset(ws: WebSocket, session_id: str, preset_name: str) -> None:
@@ -1385,22 +1405,17 @@ async def handle_step1_preset(ws: WebSocket, session_id: str, preset_name: str) 
         "music_segments": list(preset.get("music_segments", []) or []),
         "thread_object_hint": str(preset.get("thread_object_hint", "")).strip(),
         "use_locked_script": bool(preset.get("use_locked_script", False)),
-        "character_bible": str(preset.get("character_bible", "")).strip(),
+        "character_description": str(preset.get("character_description", "")).strip(),
     }
     if await _serve_demo_preset(ws, session_id, preset_name, story_context):
         return
     state_store.save(session_id, {
-        "current_beat": 2,
+        "current_beat": 5,
         "story_type": "preset",
         "story_context": story_context,
         "generated_assets": {},
     })
-    await _send_assistant(
-        ws,
-        "I can feel the world around them already.\n\n"
-        "What's the one moment that changes everything for them? Not the whole story. Just the turn.",
-        step=2,
-    )
+    await _render_story(ws, session_id, story_context, story_type="preset")
 
 
 async def handle_step1_character(ws: WebSocket, session_id: str, user_input: str) -> None:
@@ -1430,17 +1445,17 @@ async def handle_step1_character(ws: WebSocket, session_id: str, user_input: str
     })
     await _send_assistant(
         ws,
-        "I know who this film is holding close.\n\n"
-        "What's the one moment that changes everything for them? Not the whole story. Just the turn.",
+        "Good. I know who we follow.\n\n"
+        "What world is this? Give me the place, era, and atmosphere around them.",
         step=2,
     )
 
 
-async def handle_step2_turn(ws: WebSocket, session_id: str, user_input: str) -> None:
+async def handle_step2_world(ws: WebSocket, session_id: str, user_input: str) -> None:
     state = state_store.load(session_id)
     story_ctx = dict(state.get("story_context", {}))
-    story_ctx["turn"] = user_input
-    story_ctx["the_turn"] = user_input
+    story_ctx["world"] = user_input
+    story_ctx["setting"] = user_input
     story_ctx["beat2_seed"] = user_input
 
     state_store.save(session_id, {
@@ -1449,27 +1464,77 @@ async def handle_step2_turn(ws: WebSocket, session_id: str, user_input: str) -> 
     })
     await _send_assistant(
         ws,
-        "That turn gives the film its gravity.\n\n"
-        "Last question. When the screen goes dark, what feeling stays in the room?",
+        "I can see the world now.\n\n"
+        "What should it sound and feel like? Give me the mood, texture, and tone.",
         step=3,
     )
 
 
-async def handle_step3_generate(ws: WebSocket, session_id: str, user_input: str) -> None:
+async def handle_step3_sound_mood(ws: WebSocket, session_id: str, user_input: str) -> None:
     state = state_store.load(session_id)
     story_ctx = dict(state.get("story_context", {}))
-    story_ctx["remains"] = user_input
-    story_ctx["residual_feeling"] = user_input
+    story_ctx["sound_mood"] = user_input
+    story_ctx["music_preference"] = _resolve_music_preference(user_input, user_input)
+    story_ctx["visual_style"] = f"Cinematic, {user_input}".strip()
     story_ctx["beat3_seed"] = user_input
     state_store.save(session_id, {
-        "current_beat": 3,
+        "current_beat": 4,
         "story_context": story_ctx,
     })
-    await _render_interleaved_story(
+    await _send_assistant(
+        ws,
+        "That gives the film its pulse.\n\n"
+        "What changes everything for them? Give me the turn.",
+        step=4,
+    )
+
+
+async def handle_step4_change(ws: WebSocket, session_id: str, user_input: str) -> None:
+    state = state_store.load(session_id)
+    story_ctx = dict(state.get("story_context", {}))
+    story_ctx["change"] = user_input
+    story_ctx["turn"] = user_input
+    story_ctx["the_turn"] = user_input
+    story_ctx["inciting_incident"] = user_input
+    story_ctx["beat4_seed"] = user_input
+    state_store.save(session_id, {
+        "current_beat": 5,
+        "story_context": story_ctx,
+    })
+    await _send_assistant(
+        ws,
+        "That gives the film its gravity.\n\n"
+        "How does it end, or what remains after it ends?",
+        step=5,
+    )
+
+
+async def handle_step5_generate(ws: WebSocket, session_id: str, user_input: str) -> None:
+    state = state_store.load(session_id)
+    story_ctx = dict(state.get("story_context", {}))
+    story_ctx["ending"] = user_input
+    story_ctx["resolution"] = user_input
+    story_ctx["remains"] = user_input
+    story_ctx["residual_feeling"] = user_input
+    story_ctx["beat5_seed"] = user_input
+    state_store.save(session_id, {
+        "current_beat": 5,
+        "story_context": story_ctx,
+    })
+    story_type = str(state.get("story_type", "custom"))
+    if story_type == "custom":
+        await _render_interleaved_story(
+            ws,
+            session_id,
+            story_ctx,
+            story_type=story_type,
+        )
+        return
+    await _render_story(
         ws,
         session_id,
         story_ctx,
-        story_type=str(state.get("story_type", "custom")),
+        story_type=story_type,
     )
 
 
@@ -1636,9 +1701,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     if current_beat == 1:
                         await handle_step1_character(websocket, session_id, user_message)
                     elif current_beat == 2:
-                        await handle_step2_turn(websocket, session_id, user_message)
+                        await handle_step2_world(websocket, session_id, user_message)
                     elif current_beat == 3:
-                        await handle_step3_generate(websocket, session_id, user_message)
+                        await handle_step3_sound_mood(websocket, session_id, user_message)
+                    elif current_beat == 4:
+                        await handle_step4_change(websocket, session_id, user_message)
+                    elif current_beat == 5:
+                        await handle_step5_generate(websocket, session_id, user_message)
                     else:
                         await _send_assistant(websocket,
                             "Your film has been created! Refresh the page to start a new story."

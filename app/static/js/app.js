@@ -16,6 +16,13 @@ const filmPlayer = document.getElementById("film-player");
 const mediaPlaceholderEl = document.getElementById("media-placeholder");
 const characterSectionEl = document.getElementById("character-section");
 const characterImgEl = document.getElementById("character-img");
+const imageStoryPlayerEl = document.getElementById("image-story-player");
+const storyStageKickerEl = document.getElementById("story-stage-kicker");
+const storyStageImageEl = document.getElementById("story-stage-image");
+const storyStageCaptionEl = document.getElementById("story-stage-caption");
+const storyThumbnailsEl = document.getElementById("story-thumbnails");
+const storyPrevEl = document.getElementById("story-prev");
+const storyNextEl = document.getElementById("story-next");
 const storyStreamEl = document.getElementById("story-stream");
 const audioContainerEl = document.getElementById("audio-container");
 const narrationPlayerEl = document.getElementById("narration-player");
@@ -31,6 +38,21 @@ let typingEl = null;
 let recognition = null;
 let recognizing = false;
 let sessionReady = false;
+let suppressSceneStream = false;
+let storyScenes = [];
+let activeStoryScene = -1;
+
+function setInputPlaceholder(beat) {
+  if (!messageEl) return;
+  const placeholders = {
+    1: "Who do we follow?",
+    2: "What world is this?",
+    3: "What should it sound and feel like?",
+    4: "What changes everything?",
+    5: "How does it end, or what remains?",
+  };
+  messageEl.placeholder = placeholders[beat] || "Tell me the next beat…";
+}
 
 function setPresetButtonsEnabled(enabled) {
   document.querySelectorAll(".preset").forEach((button) => {
@@ -88,6 +110,7 @@ function updateBeatTracker(beat) {
     el.classList.toggle("active", value === beat);
     el.classList.toggle("completed", value < beat);
   });
+  setInputPlaceholder(beat);
   syncSoundtrackVisibility();
 }
 
@@ -106,6 +129,64 @@ function hideProgress() {
   progressEl.hidden = true;
 }
 
+function resetStoryPlayer() {
+  storyScenes = [];
+  activeStoryScene = -1;
+  if (storyStageImageEl) {
+    storyStageImageEl.removeAttribute("src");
+  }
+  if (storyStageCaptionEl) {
+    storyStageCaptionEl.textContent = "";
+  }
+  if (storyStageKickerEl) {
+    storyStageKickerEl.textContent = "Scene 1";
+  }
+  if (storyThumbnailsEl) {
+    storyThumbnailsEl.innerHTML = "";
+  }
+  if (imageStoryPlayerEl) {
+    imageStoryPlayerEl.hidden = true;
+  }
+}
+
+function renderStoryPlayer() {
+  if (!imageStoryPlayerEl || !storyStageImageEl || activeStoryScene < 0 || !storyScenes[activeStoryScene]) return;
+  const scene = storyScenes[activeStoryScene];
+  imageStoryPlayerEl.hidden = false;
+  mediaPlaceholderEl.hidden = true;
+  storyStageImageEl.src = scene.url;
+  storyStageImageEl.alt = `Scene ${scene.index}`;
+  storyStageKickerEl.textContent = `Scene ${scene.index}`;
+  storyStageCaptionEl.textContent = scene.narration || "";
+
+  if (storyPrevEl) {
+    storyPrevEl.disabled = activeStoryScene <= 0;
+  }
+  if (storyNextEl) {
+    storyNextEl.disabled = activeStoryScene >= storyScenes.length - 1;
+  }
+
+  if (storyThumbnailsEl) {
+    storyThumbnailsEl.innerHTML = "";
+    storyScenes.forEach((item, idx) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "story-thumb";
+      button.setAttribute("aria-label", `Show scene ${item.index}`);
+      if (idx === activeStoryScene) button.classList.add("active");
+      const img = document.createElement("img");
+      img.src = item.url;
+      img.alt = `Scene ${item.index}`;
+      button.appendChild(img);
+      button.addEventListener("click", () => {
+        activeStoryScene = idx;
+        renderStoryPlayer();
+      });
+      storyThumbnailsEl.appendChild(button);
+    });
+  }
+}
+
 function resetMediaState() {
   if (filmPlayer) {
     filmPlayer.pause();
@@ -120,7 +201,10 @@ function resetMediaState() {
   videoContainerEl.hidden = true;
   characterSectionEl.hidden = true;
   audioContainerEl.hidden = true;
+  resetStoryPlayer();
+  storyStreamEl.hidden = false;
   storyStreamEl.innerHTML = "";
+  suppressSceneStream = false;
   mediaPlaceholderEl.hidden = false;
   videoTitleEl.textContent = "Hero Scene";
   videoSubtitleEl.textContent = "One Veo moment arrives after the illustrated story.";
@@ -137,31 +221,31 @@ function resetMediaState() {
 }
 
 function showCharacter(url) {
+  if (suppressSceneStream) return;
   characterSectionEl.hidden = false;
   characterImgEl.src = url;
   mediaPlaceholderEl.hidden = true;
 }
 
 function appendScene(sceneUrl, narration = "", sceneIndex = 0) {
-  mediaPlaceholderEl.hidden = true;
-  const card = document.createElement("article");
-  card.className = "story-scene";
-
-  if (narration && narration.trim() && narration.trim().toLowerCase() !== "[silence]") {
-    const line = document.createElement("p");
-    line.className = "story-narration";
-    line.textContent = narration.trim();
-    card.appendChild(line);
+  if (suppressSceneStream) return;
+  storyStreamEl.hidden = true;
+  const normalizedIndex = Math.max(Number(sceneIndex || 0), 1);
+  const scene = {
+    index: normalizedIndex,
+    url: sceneUrl,
+    narration: String(narration || "").trim().toLowerCase() === "[silence]" ? "" : String(narration || "").trim(),
+  };
+  const existingIdx = storyScenes.findIndex((item) => item.index === normalizedIndex);
+  if (existingIdx >= 0) {
+    storyScenes[existingIdx] = scene;
+    activeStoryScene = existingIdx;
+  } else {
+    storyScenes.push(scene);
+    storyScenes.sort((a, b) => a.index - b.index);
+    activeStoryScene = storyScenes.findIndex((item) => item.index === normalizedIndex);
   }
-
-  const image = document.createElement("img");
-  image.className = "story-image";
-  image.src = sceneUrl;
-  image.alt = sceneIndex ? `Scene ${sceneIndex}` : "Story scene";
-  card.appendChild(image);
-
-  storyStreamEl.appendChild(card);
-  storyStreamEl.scrollTop = storyStreamEl.scrollHeight;
+  renderStoryPlayer();
 }
 
 function showNarrationAudio(audioUrl) {
@@ -172,6 +256,14 @@ function showNarrationAudio(audioUrl) {
 }
 
 function showVideo(videoUrl, options = {}) {
+  suppressSceneStream = true;
+  storyStreamEl.hidden = true;
+  storyStreamEl.innerHTML = "";
+  if (imageStoryPlayerEl) {
+    imageStoryPlayerEl.hidden = true;
+  }
+  characterSectionEl.hidden = true;
+  audioContainerEl.hidden = true;
   filmPlayer.src = videoUrl;
   filmPlayer.load();
   videoContainerEl.hidden = false;
@@ -189,6 +281,22 @@ function showVideo(videoUrl, options = {}) {
   if (assetActionsEl) {
     assetActionsEl.hidden = false;
   }
+}
+
+if (storyPrevEl) {
+  storyPrevEl.addEventListener("click", () => {
+    if (activeStoryScene <= 0) return;
+    activeStoryScene -= 1;
+    renderStoryPlayer();
+  });
+}
+
+if (storyNextEl) {
+  storyNextEl.addEventListener("click", () => {
+    if (activeStoryScene >= storyScenes.length - 1) return;
+    activeStoryScene += 1;
+    renderStoryPlayer();
+  });
 }
 
 function currentPayload() {
@@ -277,10 +385,12 @@ ws.onmessage = (event) => {
   }
 
   if (data.type === "demo_preset_loaded") {
+    suppressSceneStream = true;
     clearConversation();
     setInteractiveControlsVisible(false);
     updateBeatTracker(6);
     resetMediaState();
+    suppressSceneStream = true;
     return;
   }
 
@@ -289,6 +399,8 @@ ws.onmessage = (event) => {
     addMessage("assistant", data.content || data.text || "");
     if (data.film_ready) {
       updateBeatTracker(6);
+      hideProgress();
+    } else if (Number(data.step || 0) >= 6) {
       hideProgress();
     }
     return;

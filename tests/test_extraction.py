@@ -5,8 +5,6 @@ from unittest.mock import MagicMock, patch
 
 from config.settings import Settings
 from generation.extraction import (
-    classify_veo_safety,
-    enforce_character_bible,
     generate_creative_direction,
     generate_emotional_script,
     generate_film_blueprint,
@@ -111,64 +109,6 @@ class TestStoryExtraction(unittest.TestCase):
         self.assertTrue(blueprint["scenes"][0]["narration_ssml"].startswith("<speak>"))
         self.assertEqual(blueprint["silence_after_scene_5"], 2.5)
         self.assertEqual(blueprint["silence_after_scene_7"], 1.5)
-
-    def test_enforce_character_bible_injects_exact_text_and_suffix(self) -> None:
-        blueprint = {
-            "character_bible": "a weathered man in his early 50s with kind brown eyes, short gray-flecked beard, sand-colored linen tunic, and ink-stained cuffs",
-            "visual_style_anchor": "Warm earth tones, soft natural light, visible film grain and dust motes",
-        }
-        prompt = enforce_character_bible(
-            blueprint,
-            {
-                "has_character": True,
-                "veo_prompt": "Close-up, slow dolly-in. He carves a wooden bird at a stone table. Audio: knife on wood, distant birdsong.",
-            },
-        )
-        self.assertIn(blueprint["character_bible"], prompt)
-        self.assertIn(blueprint["visual_style_anchor"], prompt)
-        self.assertIn("No text, no subtitles, no logos, no title cards.", prompt)
-
-    @patch("generation.extraction.genai.Client")
-    def test_classify_veo_safety_attaches_flags_and_safe_alternatives(self, mock_genai_client: MagicMock) -> None:
-        settings = Settings(gcp_project_id="test-project", scene_count=8)
-        fake_client = MagicMock()
-        fake_client.models.generate_content.return_value.text = """
-        [
-          {"scene_number": 1, "veo_safe": false, "reason": "shows child face", "safe_alternative": "Close-up of ink-stained hands turning pages in warm light."},
-          {"scene_number": 2, "veo_safe": true, "reason": "adult reading calmly", "safe_alternative": ""}
-        ]
-        """
-        mock_genai_client.return_value = fake_client
-
-        classified = classify_veo_safety(
-            [
-                {"veo_prompt": "Close-up of a child face in tears.", "image_prompt": "Child face in tears."},
-                {"veo_prompt": "Close-up of a middle-aged man reading by a window in warm light.", "image_prompt": "Middle-aged man reading by a window."},
-            ],
-            settings,
-        )
-
-        self.assertFalse(classified[0]["veo_safe"])
-        self.assertTrue(classified[1]["veo_safe"])
-        self.assertIn("hands", classified[0]["safe_alternative"].lower())
-
-    @patch("generation.extraction.genai.Client")
-    def test_classify_veo_safety_fallback_heuristic_allows_adult_faces(self, mock_genai_client: MagicMock) -> None:
-        settings = Settings(gcp_project_id="test-project", scene_count=8)
-        mock_genai_client.side_effect = RuntimeError("classifier unavailable")
-
-        classified = classify_veo_safety(
-            [
-                {
-                    "veo_prompt": "Medium shot of a middle-aged woman reading at a desk in morning light.",
-                    "image_prompt": "Middle-aged woman reading at a desk.",
-                    "narration": "She keeps the ritual of reading alive.",
-                }
-            ],
-            settings,
-        )
-
-        self.assertTrue(classified[0]["veo_safe"])
 
     @patch("generation.extraction.genai.Client")
     def test_rewrite_for_veo_safety_returns_rewritten_prompt(self, mock_genai_client: MagicMock) -> None:

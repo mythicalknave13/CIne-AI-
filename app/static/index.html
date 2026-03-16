@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="CineAI Director — AI-powered cinematic film generation" />
   <title>CineAI Director</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=20260316a" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20260317c" />
 </head>
 
 <body>
@@ -16,11 +16,15 @@
       <h1>CineAI Director</h1>
 
       <div class="beat-tracker" id="beat-tracker">
-        <span class="beat active" data-beat="1">1 · Who We Love</span>
+        <span class="beat active" data-beat="1">1 · Who</span>
         <span class="beat-arrow">→</span>
-        <span class="beat" data-beat="2">2 · The Turn</span>
+        <span class="beat" data-beat="2">2 · World</span>
         <span class="beat-arrow">→</span>
-        <span class="beat" data-beat="3">3 · What Remains</span>
+        <span class="beat" data-beat="3">3 · Sound / Mood</span>
+        <span class="beat-arrow">→</span>
+        <span class="beat" data-beat="4">4 · Change</span>
+        <span class="beat-arrow">→</span>
+        <span class="beat" data-beat="5">5 · Ending</span>
       </div>
 
       <div class="presets" id="presets">
@@ -40,7 +44,7 @@
       </div>
 
       <form id="chat-form" class="chat-form">
-        <input id="message" type="text" placeholder="Tell me about someone…" autocomplete="off" />
+        <input id="message" type="text" placeholder="Who do we follow?" autocomplete="off" />
         <button id="mic-button" class="mic-button" type="button" aria-label="Use voice input" title="Use voice input">🎙️</button>
         <button type="submit">Send</button>
       </form>
@@ -53,6 +57,24 @@
       <div id="character-section" class="character-section" hidden>
         <h3>Story Card</h3>
         <img id="character-img" alt="Character Reference" />
+      </div>
+
+      <div id="image-story-player" class="image-story-player" hidden>
+        <div class="story-stage">
+          <div class="story-stage-head">
+            <p id="story-stage-kicker" class="story-stage-kicker">Scene 1</p>
+            <div class="story-stage-controls">
+              <button id="story-prev" class="story-nav" type="button" aria-label="Previous scene">←</button>
+              <button id="story-next" class="story-nav" type="button" aria-label="Next scene">→</button>
+            </div>
+          </div>
+          <div class="story-stage-frame">
+            <img id="story-stage-image" class="story-stage-image" alt="Story scene" />
+          </div>
+          <p id="story-stage-caption" class="story-stage-caption"></p>
+        </div>
+
+        <div id="story-thumbnails" class="story-thumbnails" aria-label="Story scenes"></div>
       </div>
 
       <div id="story-stream" class="story-stream"></div>
@@ -75,12 +97,12 @@
       <div id="media-placeholder" class="media-placeholder">
         <div class="icon">🎞️</div>
         <div class="label">Your story will appear here</div>
-        <div class="sublabel">A live stream of narration, images, and one hero video.</div>
+        <div class="sublabel">A cinematic film, narration, and storyboard will appear here.</div>
       </div>
     </section>
   </main>
 
-  <script src="/static/js/app.js?v=20260316a"></script>
+  <script src="/static/js/app.js?v=20260317c"></script>
 </body>
 
 </html>

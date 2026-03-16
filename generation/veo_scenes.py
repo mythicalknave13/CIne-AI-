@@ -15,7 +15,7 @@ from google.cloud import storage
 from google.genai import types
 
 from config.settings import Settings
-from generation.extraction import enforce_character_bible, rewrite_for_veo_safety
+from generation.extraction import rewrite_for_veo_safety
 from generation.vertex import vertex_client_kwargs
 
 logger = logging.getLogger("uvicorn.error")
@@ -233,24 +233,13 @@ def generate_single_veo_scene(
     output_dir.mkdir(parents=True, exist_ok=True)
     preview_dir.mkdir(parents=True, exist_ok=True)
 
-    blueprint = (
-        story_context.get("film_blueprint", {})
-        if isinstance(story_context.get("film_blueprint", {}), dict)
-        else {}
-    )
     veo_prompt = str(scene_data.get("veo_prompt", "")).strip() or _default_veo_prompt(scene_data, story_context)
-    if blueprint:
-        veo_prompt = enforce_character_bible(blueprint, {**scene_data, "veo_prompt": veo_prompt})
     audio_cue = str(scene_data.get("veo_audio_cue", "")).strip()
     rewritten_prompt = rewrite_for_veo_safety(veo_prompt, settings)
-    if blueprint:
-        rewritten_prompt = enforce_character_bible(blueprint, {**scene_data, "veo_prompt": rewritten_prompt})
     prompt = _compose_prompt(rewritten_prompt, audio_cue)
     safe_fallback_prompt = _compose_prompt(get_safe_fallback_prompt(scene_data), audio_cue)
     extension_seed = str(scene_data.get("veo_extension_prompt", "")).strip() or veo_prompt
     rewritten_extension = rewrite_for_veo_safety(extension_seed, settings)
-    if blueprint:
-        rewritten_extension = enforce_character_bible(blueprint, {**scene_data, "veo_prompt": rewritten_extension})
     extension_prompt = _compose_prompt(rewritten_extension, audio_cue)
 
     output_path = output_dir / f"scene_{scene_index:02d}_veo.mp4"

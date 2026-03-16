@@ -372,7 +372,7 @@ def _synthesize_speech(
             if not _is_transient_tts_error(exc) or attempt == 2:
                 raise
             last_error = exc
-            wait_seconds = (2 ** attempt) + random.uniform(0, 0.75)
+            wait_seconds = 10.0
             logger.warning(
                 "Transient TTS error for voice %s. Waiting %.1fs before retry %d/3. (%s)",
                 profile.voice_name,
@@ -458,6 +458,32 @@ def _apply_tempo_adjustment(
     return output_path
 
 
+def _polish_narration_track(
+    *,
+    input_path: Path,
+    output_path: Path,
+    sample_rate: int,
+) -> Path:
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_path),
+            "-af",
+            "highpass=f=120,acompressor=threshold=0.05:ratio=3:attack=5:release=50,volume=1.3",
+            "-ac",
+            "2",
+            "-ar",
+            str(sample_rate),
+            str(output_path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return output_path
+
+
 def _volume_shape_expression(
     windows: List[tuple[float, float]] | None,
     *,
@@ -487,6 +513,7 @@ def create_narration_audio(
     scene_lead_in_map: dict[int, float] | None = None,
     scene_rate_map: dict[int, float] | None = None,
     preserve_intro_length: bool = True,
+    respect_ssml_timing: bool = False,
 ) -> Path:
     total_start = time.perf_counter()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -623,8 +650,12 @@ def create_narration_audio(
             speech_duration = 0.0
 
         if line:
-            pre_silence = max(lead_in_map.get(idx, 1.5), 1.5)
-            post_silence = max(0.5, target_scene_duration - pre_silence - speech_duration)
+            if respect_ssml_timing and ssml_text:
+                pre_silence = 0.0
+                post_silence = max(0.0, target_scene_duration - speech_duration)
+            else:
+                pre_silence = max(lead_in_map.get(idx, 1.5), 1.5)
+                post_silence = max(0.5, target_scene_duration - pre_silence - speech_duration)
         else:
             pre_silence = 0.0
             post_silence = 0.0
@@ -655,13 +686,23 @@ def create_narration_audio(
     narration_assembled_path = output_dir / "narration_assembled.wav"
     _concat_wav_files(assembled_paths, narration_assembled_path)
 
+    raw_output_path = output_dir / "narration_raw.wav"
     output_path = output_dir / "narration.wav"
     _pad_audio_to_duration(
         input_path=narration_assembled_path,
-        output_path=output_path,
+        output_path=raw_output_path,
         target_duration=target_total_duration,
         sample_rate=settings.audio_sample_rate,
     )
+    try:
+        _polish_narration_track(
+            input_path=raw_output_path,
+            output_path=output_path,
+            sample_rate=settings.audio_sample_rate,
+        )
+    except Exception as exc:
+        logger.warning("Narration polish failed, using raw narration. (%s)", exc)
+        shutil.copyfile(raw_output_path, output_path)
     logger.info(
         "TIMING tts complete scenes=%d intro_duration=%.2fs scene_duration=%.2fs total=%.2fs output=%s",
         scene_count,

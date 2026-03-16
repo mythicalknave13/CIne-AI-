@@ -24,8 +24,8 @@ class Settings(BaseModel):
     firestore_collection: str = Field(default="sessions")
     firestore_database_id: str = Field(default="(default)")
 
-    image_model: str = Field(default="gemini-2.5-flash-image")
-    character_image_model: str = Field(default="gemini-2.5-flash-image")
+    image_model: str = Field(default="gemini-2.5-flash")
+    character_image_model: str = Field(default="gemini-2.5-flash")
     conversation_model: str = Field(default="gemini-2.5-flash")
     script_routing_model: str = Field(default="gemini-2.5-flash-lite")
     script_writer_model: str = Field(default="gemini-2.5-pro")
@@ -69,8 +69,8 @@ def get_settings() -> Settings:
         gcs_bucket=os.getenv("GCS_BUCKET", ""),
         firestore_collection=os.getenv("FIRESTORE_COLLECTION", "sessions"),
         firestore_database_id=os.getenv("FIRESTORE_DATABASE_ID", "(default)"),
-        image_model=_resolve_model_name("IMAGE_MODEL", "gemini-2.5-flash-image"),
-        character_image_model=_resolve_model_name("CHARACTER_IMAGE_MODEL", "gemini-2.5-flash-image"),
+        image_model=_resolve_model_name("IMAGE_MODEL", "gemini-2.5-flash"),
+        character_image_model=_resolve_model_name("CHARACTER_IMAGE_MODEL", "gemini-2.5-flash"),
         conversation_model=_resolve_model_name("CONVERSATION_MODEL", "gemini-2.5-flash"),
         script_routing_model=_resolve_model_name("SCRIPT_ROUTING_MODEL", "gemini-2.5-flash-lite"),
         script_writer_model=_resolve_model_name("SCRIPT_WRITER_MODEL", "gemini-2.5-pro"),
