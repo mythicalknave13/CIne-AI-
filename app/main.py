@@ -102,12 +102,12 @@ ADK_APP_NAME = "cineai"
 ADK_USER_ID = "browser"
 BACKGROUND_MUSIC_TASKS: Dict[str, asyncio.Task[Path]] = {}
 BACKGROUND_CHARACTER_TASKS: Dict[str, asyncio.Task[Path]] = {}
-OPENING_CARD_SECONDS = 5.0
-END_CARD_SECONDS = 6.0
+OPENING_CARD_SECONDS = 3.0
+END_CARD_SECONDS = 4.0
 CINEMATIC_SCENE_SECONDS = 8.0
 MAJOR_STAGE_STAGGER_SECONDS = 2.0
 STILL_FALLBACK_STAGGER_SECONDS = 20.0
-SCENE_TRANSITIONS_AFTER = {1: 1.0, 2: 1.0, 3: 1.0, 4: 1.0}
+SCENE_TRANSITIONS_AFTER = {1: 0.5, 2: 0.5, 3: 0.5, 4: 0.5}
 SCENE_BLACK_PAUSES = {5: 3.0, 6: 2.0, 7: 2.0}
 SACRIFICE_SCENE_LEAD_INS = {
     1: 1.5,
@@ -780,10 +780,7 @@ async def _render_story(
         transition_after=SCENE_TRANSITIONS_AFTER,
     )
     scene_lead_in_map = {
-        index: max(
-            float(scene.get("narration_pause_before", scene.get("narration_lead_in_seconds", 0.5)) or 0.5),
-            0.0,
-        )
+        index: (1.5 if str(scene.get("narration", "")).strip() else 0.0)
         for index, scene in enumerate(all_script, start=1)
     }
     scene_rate_map = {

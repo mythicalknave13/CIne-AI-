@@ -515,13 +515,13 @@ BLUEPRINT_TTS_DEFAULTS = {
 
 DEFAULT_NARRATION_PAUSES = {
     1: 1.5,
-    2: 0.5,
-    3: 0.5,
-    4: 0.5,
-    5: 0.5,
-    6: 2.0,
-    7: 4.0,
-    8: 0.5,
+    2: 0.0,
+    3: 1.5,
+    4: 1.5,
+    5: 1.5,
+    6: 0.0,
+    7: 0.0,
+    8: 1.5,
 }
 
 
@@ -551,8 +551,8 @@ def _default_character_bible(story_context: Dict[str, Any]) -> str:
     ).strip()
     world = str(story_context.get("world", story_context.get("setting", ""))).strip()
     candidate = (
-        f"{base}, adult and older than 25, with weathered eyes, practical hair, "
-        f"wearing work-worn clothing shaped by life in {world or 'their world'}, and distinctive hands marked by years of ritual"
+        f"an adult over 25 from {world or 'their world'}, with medium-brown skin, a solid work-worn build, short practical hair, "
+        f"wearing a faded textured work shirt, and thick weathered hands marked by years of ritual and labor"
     )
     return _normalize_character_bible(candidate, candidate)
 
@@ -642,9 +642,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 1,
             "emotional_beat": "warmth",
-            "narration": f"They were most themselves in small gestures. {emotional_anchor}",
+            "narration": "My hands knew the ritual before dawn ever did.",
             "narrator_voice": "old_woman_remembering",
-            "veo_prompt": f"Extreme close-up with gentle drift, hands of {character_essence} doing a familiar task, warm natural light, {visual_style}, dust in the air, sound of soft room tone.",
+            "veo_prompt": f"Close-up, static camera. Hands of {character_essence} work through a familiar ritual with the thread object nearby. Primary workspace at dawn, soft natural light from one side. {visual_style}. Audio: cloth moving, distant birds, soft room tone. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "soft room tone, distant birds, gentle movement",
             "image_prompt": f"Close-up of the hands of {character_essence} doing a familiar task, warm natural light, intimate and calm, {world}",
             "music_mood": "tender intimate warmth",
@@ -655,9 +655,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 2,
             "emotional_beat": "context",
-            "narration": f"The world around them felt permanent. {world}",
+            "narration": "",
             "narrator_voice": "old_woman_remembering",
-            "veo_prompt": f"Wide shot with slow drift over {world}, beautiful and fragile details, warm light, {visual_style}, sound of wind and distant life.",
+            "veo_prompt": f"Wide aerial shot, gentle descent. The wider world around the primary location with the character as a small figure in the distance. Same dawn conditions and weather as scene 1. {visual_style}. Audio: wind, distant life, natural ambience. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "wind, distant life, natural ambience",
             "image_prompt": f"Wide cinematic view of {world}, peaceful and fragile, detailed environment, {visual_style}",
             "music_mood": "worldbuilding fragile peace",
@@ -668,9 +668,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 3,
             "emotional_beat": "the_crack",
-            "narration": f"Something shifted before anyone spoke. {the_turn}",
+            "narration": "I heard the change before I found words for it.",
             "narrator_voice": "old_woman_remembering",
-            "veo_prompt": "Close-up on a reaction seen indirectly: a window shadow changing, hands pausing, light narrowing, slow push-in, tension in stillness, distant low rumble.",
+            "veo_prompt": "Medium shot from behind, slow push-in. The character faces away toward something shifting beyond the primary space while one hand goes still. Same time of day, same weather, light cooling as conditions change. Audio: distant rumble, wind tightening, sudden hush. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "distant rumble, wind tightening, sudden hush",
             "image_prompt": "A cinematic sign of change: paused hands, narrowing light, a room holding its breath, tension without visible conflict",
             "music_mood": "hairline crack tension",
@@ -681,9 +681,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 4,
             "emotional_beat": "the_weight",
-            "narration": "The decision was made in silence, by what they touched and what they set down.",
+            "narration": "I touched each thing like it might remember me.",
             "narrator_voice": "old_woman_remembering",
-            "veo_prompt": "Extreme close-up on hands carefully closing, lifting, or placing meaningful objects, candle or dawn light, deliberate gestures, subtle push-in, sound of cloth and wood.",
+            "veo_prompt": "Close-up of hands, slow dolly-in. Hands close, lift, or place meaningful objects with the thread object clearly visible. Back in the primary location under the same anchored light and weather. Audio: cloth rustle, wood, quiet breathing. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "cloth rustle, wood, quiet breathing",
             "image_prompt": "Close-up of hands making a careful irreversible choice with meaningful objects, intimate light, physical gestures of resolve",
             "music_mood": "resolve under sorrow",
@@ -694,9 +694,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 5,
             "emotional_beat": "the_goodbye",
-            "narration": "The tenderest moment is always the one that does not know it is the last.",
+            "narration": "I left it where love would find it after me.",
             "narrator_voice": "old_woman_remembering",
-            "veo_prompt": "Static intimate shot of a candle, doorway light, and the trace of someone just having passed, soft moonlight, almost no movement, one breath and silence.",
+            "veo_prompt": "Medium profile shot, static camera. The character pauses in dramatic side light while leaving the thread object behind. A place just beyond the primary location, same weather pressing in. Audio: one breath, soft footstep, near-silence. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "one breath, candle flicker, near-silence",
             "image_prompt": "A tender room with a candle, doorway light, and the feeling that someone has just left, intimate sorrow without showing faces",
             "music_mood": "near-silent heartbreak",
@@ -707,9 +707,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 6,
             "emotional_beat": "the_stand",
-            "narration": "When the moment came, they had already become something unmovable.",
-            "narrator_voice": "mythic_narrator",
-            "veo_prompt": "Wide shot of a single silhouette standing still in strong backlight, long shadow toward camera, monumental posture, dust in the air, sound of wind and echo.",
+            "narration": "",
+            "narrator_voice": "old_woman_remembering",
+            "veo_prompt": "Wide environmental shot, static camera. The character appears as a silhouette holding steady against the world, body turned away from camera. Same anchored weather, same light now harsher at the edge of day. Audio: wind, echo, distant surf. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "wind, echo, dust settling",
             "image_prompt": "Silhouette of a single figure in strong backlight, long shadow, monumental and still, transformation through posture only",
             "music_mood": "monumental tragic peak",
@@ -720,9 +720,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 7,
             "emotional_beat": "the_stillness",
-            "narration": "Afterward, the space held their absence more clearly than any words could.",
+            "narration": "",
             "narrator_voice": "old_woman_remembering",
-            "veo_prompt": "Slow drift across an empty space touched by dawn light, one meaningful object left behind, no people, mist and stillness, sound of morning birds and wind.",
+            "veo_prompt": "Static wide shot. The primary location stands empty under the same weather and light, with one object missing and the absence doing the storytelling. No people in frame. Audio: morning birds, gentle wind, profound stillness. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "morning birds, gentle wind, profound stillness",
             "image_prompt": "Empty place at dawn with one meaningful object left behind, no people, peaceful stillness that carries loss",
             "music_mood": "devastated earned quiet",
@@ -733,9 +733,9 @@ def _fallback_emotional_script(story_context: Dict[str, Any]) -> List[Dict[str, 
         {
             "scene_number": 8,
             "emotional_beat": "what_remains",
-            "narration": f"What remained was this: {residual_feeling}",
+            "narration": "My hands still remember what the world asked of them.",
             "narrator_voice": "old_woman_remembering",
-            "veo_prompt": f"Extreme close-up echoing scene 1, same gesture repeated by different hands or in different time, warm light, full-circle composition, sound of the original ambience returning.",
+            "veo_prompt": f"Close-up, static camera. Hands echo scene 1 exactly, repeating the same gesture in the same primary location with changed time inside the same weather pattern. {visual_style}. Audio: the first birdsong returning, gentle room tone. No text, no subtitles, no logos, no title cards.",
             "veo_audio_cue": "the first birdsong returning, gentle room tone",
             "image_prompt": f"Echo of scene 1 with the same gesture transformed by time, cinematic closure, final image evoking {final_image}",
             "music_mood": "bittersweet full-circle resolution",
@@ -857,22 +857,44 @@ Write 8 scenes following this emotional structure. For EACH scene output ALL of 
 
 A) emotional_beat: one of warmth, context, crack, weight, goodbye, stand, stillness, remains
 
-B) narration: 8-15 words MAXIMUM. Sparse. Poetic. Written to be spoken aloud. This is voiceover — the character is NOT speaking on screen.
+B) narration: 5-12 words MAXIMUM. Sparse. Poetic. Written to be spoken aloud. ALL narration must be FIRST PERSON. The narrator IS the main character, speaking from memory.
+
+GOOD narration:
+- "I carved it the night before she left."
+- "The sea was different that morning."
+- "I knew. I think I always knew."
+- "My hands still remember the weight of it."
+
+BAD narration:
+- "He carved a bird for his daughter."
+- "The old man walked to the shore."
+- "She watched as the sun set over the water."
+- "Their bond was unbreakable."
+
+Each line must be speakable in under 5 seconds at a slow deliberate pace. If it cannot be said in one breath, it is too long.
+
+Narration map:
+- Scene 1: YES
+- Scene 2: OPTIONAL, may be empty
+- Scene 3: YES
+- Scene 4: YES
+- Scene 5: YES
+- Scene 6: NO narration preferred
+- Scene 7: NO narration
+- Scene 8: YES
 
 C) narrator_voice: who speaks this line. Pick from:
    - "old_woman_remembering"
    - "old_man_remembering"
    - "young_woman_present"
    - "young_man_present"
-   - "mythic_narrator"
-   - "child_witnessing"
    Use maximum 3 different voices across 8 scenes.
 
-D) narration_pause_before: seconds of silence before narration starts (0.5 for most, 2.0 for scene 6, 4.0 for scene 7)
+D) narration_pause_before: seconds of silence before narration starts. Use 1.5 for scenes with narration and 0.0 for silent scenes.
 
 E) veo_prompt: Follow this EXACT formula —
 
-   [SHOT TYPE + CAMERA MOVEMENT]. [CHARACTER BIBLE text — paste the 40-word description from Step 1 if the character is in frame, or describe what IS in frame]. [ONE concrete action verb]. [SETTING with time of day]. [VISUAL STYLE ANCHOR from Step 3]. Audio: [2-3 specific sounds]. No text, no subtitles, no logos, no title cards.
+   [SHOT TYPE + CAMERA MOVEMENT]. [CHARACTER BIBLE text — paste the 40-word description from Step 1 if the character is in frame, or describe what IS in frame]. [ONE concrete action verb]. [SETTING with time of day and weather]. [VISUAL STYLE ANCHOR from Step 3]. Audio: [2-3 specific sounds]. No text, no subtitles, no logos, no title cards.
 
    CRITICAL VEO RULES:
    - Start EVERY prompt with shot type and camera movement
@@ -884,6 +906,21 @@ E) veo_prompt: Follow this EXACT formula —
    - Total prompt: 60-100 words
    - Scene 7 must have NO PERSON in frame — only objects, space, light
    - Scene 8 must MIRROR Scene 1's shot type and framing
+   - Avoid frontal face shots. Use body, clothing, hands, silhouettes, profiles, backs, and over-the-shoulder compositions.
+
+   CAMERA RULES FOR CHARACTER CONSISTENCY:
+   - Allowed shots: close-up of hands, medium shot from behind, wide silhouette, over-the-shoulder, low angle with face in shadow, profile shot in dim lighting
+   - Forbidden shots: frontal close-up of face, clearly lit front-facing medium shot, both eyes clearly visible, tracking shot from the front
+
+   SPECIFIC SHOT ASSIGNMENTS:
+   - Scene 1: close-up of hands doing the character's defining action
+   - Scene 2: wide aerial or establishing, character is a small figure in landscape
+   - Scene 3: medium from behind, character facing away
+   - Scene 4: close-up of hands again, with thread object
+   - Scene 5: profile in dramatic light
+   - Scene 6: wide shot, character as silhouette
+   - Scene 7: no person, empty space only
+   - Scene 8: close-up of hands mirroring Scene 1 exactly
 
    LOCATION ANCHORING RULES:
    - Define ONE primary location and return to it in scenes 1, 4, and 8
@@ -1010,10 +1047,17 @@ Return this exact JSON structure:
             veo_prompt,
             str(default_scene.get("veo_audio_cue", "")),
         )
+        if "narration" in item:
+            item_narration = _clean_narration_line(item.get("narration", ""))
+        elif index in {2, 6, 7}:
+            item_narration = ""
+        else:
+            item_narration = _clean_narration_line(default_scene["narration"])
+
         scene = {
             "scene_number": index,
             "emotional_beat": str(item.get("emotional_beat", default_scene["emotional_beat"])).strip() or default_scene["emotional_beat"],
-            "narration": _limit_words(re.sub(r"\s+", " ", str(item.get("narration", "")).strip()) or str(default_scene["narration"]), 15),
+            "narration": _limit_words(item_narration, 12),
             "narrator_voice": narrator_voice,
             "narrator_profile": narrator_profile,
             "narration_pause_before": float(item.get("narration_pause_before", default_scene.get("narration_pause_before", DEFAULT_NARRATION_PAUSES.get(index, 0.5))) or DEFAULT_NARRATION_PAUSES.get(index, 0.5)),

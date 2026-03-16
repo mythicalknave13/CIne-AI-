@@ -609,22 +609,25 @@ def create_narration_audio(
                 sample_rate=settings.audio_sample_rate,
                 rate=max(rate_map.get(idx, 1.0), 0.5),
             )
+            speech_duration = _safe_wav_duration_seconds(source_for_padding)
+            if speech_duration > 5.5:
+                logger.warning(
+                    "Scene %d narration too long: %.1fs, may overlap scene timing.",
+                    idx,
+                    speech_duration,
+                )
         else:
             _write_silence_wav(raw_path, duration_seconds=target_scene_duration, sample_rate=settings.audio_sample_rate)
             shutil.copyfile(raw_path, adjusted_path)
             source_for_padding = adjusted_path
+            speech_duration = 0.0
 
-        pre_silence = lead_in_map.get(
-            idx,
-            NARRATION_STILLNESS_PRE_SILENCE_SECONDS
-            if idx == stillness_scene_index
-            else NARRATION_PRE_SILENCE_SECONDS,
-        )
-        post_silence = (
-            NARRATION_GOODBYE_POST_SILENCE_SECONDS
-            if idx == goodbye_scene_index
-            else NARRATION_POST_SILENCE_SECONDS
-        )
+        if line:
+            pre_silence = max(lead_in_map.get(idx, 1.5), 1.5)
+            post_silence = max(0.5, target_scene_duration - pre_silence - speech_duration)
+        else:
+            pre_silence = 0.0
+            post_silence = 0.0
         _build_padded_narration_clip(
             input_path=source_for_padding,
             output_path=padded_path,
