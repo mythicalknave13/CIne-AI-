@@ -20,6 +20,32 @@ Open:
 http://127.0.0.1:8080
 ```
 
+## Architecture Diagram
+
+Upload a screenshot or export of the diagram below to the Devpost image gallery or file upload as the required architecture diagram.
+
+```mermaid
+flowchart LR
+    A["Browser UI<br/>5-question story intake"] --> B["FastAPI app<br/>app/main.py"]
+    B --> C["Session state<br/>Firestore via google.cloud.firestore"]
+    B --> D["Story engine<br/>generation/story.py"]
+    D --> E["Gemini via Google GenAI SDK<br/>TEXT + IMAGE generation"]
+    D --> F["Cached demo presets<br/>app/static/demo_presets"]
+    B --> G["Narration generation<br/>generation/audio.py"]
+    B --> H["Optional Veo / media helpers<br/>generation/veo_scenes.py"]
+    H --> I["Google Cloud Storage access<br/>google.cloud.storage"]
+    B --> J["Static assets served to frontend<br/>images, narration, demo video"]
+    J --> A
+```
+
+At a high level:
+- the browser collects the five story beats
+- FastAPI orchestrates the story flow
+- Firestore can persist session state
+- Gemini generates the story content
+- cached demo assets provide a reliable fallback path
+- optional narration/media helpers prepare playback assets for the frontend
+
 ## Reproducible Testing
 
 ### Option A: No-API Demo Test
