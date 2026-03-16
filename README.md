@@ -71,6 +71,33 @@ Expected result:
 
 If model quota is unavailable, use the preset demo path above for evaluation.
 
+## Google Cloud / Google API Usage Proof
+
+Judges can verify Google services and APIs directly in the repo:
+
+- Google GenAI SDK story generation:
+  - [generation/story.py#L216-L242](generation/story.py#L216-L242)
+  - Uses `google.genai` and `client.models.generate_content(...)` with `TEXT + IMAGE` output.
+
+- Firestore session state on Google Cloud:
+  - [app/cineai_agent/agent.py#L20-L39](app/cineai_agent/agent.py#L20-L39)
+  - [app/cineai_agent/agent.py#L53-L89](app/cineai_agent/agent.py#L53-L89)
+  - Uses `google.cloud.firestore` and `firestore.Client(...)` for session persistence.
+
+- Vertex AI configuration and Cloud auth:
+  - [generation/vertex.py#L10-L15](generation/vertex.py#L10-L15)
+  - [generation/vertex.py#L135-L154](generation/vertex.py#L135-L154)
+  - Includes `cloud-platform` scope, Vertex region routing, `vertexai=True`, and ADC-based Google auth refresh.
+
+- Google Cloud Storage handling for generated media:
+  - [generation/veo_scenes.py#L14-L15](generation/veo_scenes.py#L14-L15)
+  - [generation/veo_scenes.py#L88-L94](generation/veo_scenes.py#L88-L94)
+  - Uses `google.cloud.storage` and `storage.Client()` to fetch GCS-backed video assets.
+
+- GCP project/location configuration:
+  - [config/settings.py#L17-L33](config/settings.py#L17-L33)
+  - Shows the app’s Google Cloud project, location, Firestore, GCS, Gemini, and Veo settings.
+
 ## Minimal Checks
 
 ```bash
