@@ -142,6 +142,7 @@ PRESET_LABELS = {
     "discovery": "The Discovery",
 }
 DEFAULT_MUSIC_PREFERENCE = "Epic and orchestral"
+ENABLE_VEO = False
 
 # ── Opening greeting ─────────────────────────────────────────────────
 
@@ -670,6 +671,7 @@ async def _render_interleaved_story(
     story_type: str,
 ) -> None:
     render_start = time.perf_counter()
+    loop = asyncio.get_running_loop()
     session_dir = STATIC_DIR / "generated" / session_id
     scenes_dir = session_dir / "scenes"
     audio_dir = session_dir / "audio"
@@ -689,6 +691,29 @@ async def _render_interleaved_story(
         logger.warning("Failed to persist story context for session %s: %s", session_id, exc)
 
     await _send_progress(ws, "Imagining the story world…", 30)
+    streamed_scene_numbers: set[int] = set()
+
+    def _scene_ready(scene: Dict[str, Any]) -> None:
+        scene_number = int(scene.get("scene_number", 0) or 0)
+        scene_path = Path(str(scene.get("image_path", "")))
+        if scene_number <= 0 or not scene_path.exists():
+            return
+        streamed_scene_numbers.add(scene_number)
+        scene_url = _versioned_static_url(
+            f"/static/generated/{session_id}/scenes/{scene_path.name}",
+            scene_path,
+        )
+        narration = str(scene.get("narration", "")).strip()
+        asyncio.run_coroutine_threadsafe(
+            _send_scene_payload(
+                ws,
+                scene_index=scene_number,
+                scene_url=scene_url,
+                narration=narration,
+            ),
+            loop,
+        )
+
     interleaved = await asyncio.to_thread(
         generate_interleaved_story,
         {
@@ -700,6 +725,7 @@ async def _render_interleaved_story(
         },
         settings,
         scenes_dir,
+        _scene_ready,
     )
 
     scenes = list(interleaved.get("scenes", []) or [])[:INTERLEAVED_SCENE_COUNT]
@@ -721,13 +747,15 @@ async def _render_interleaved_story(
         narration = str(scene.get("narration", "")).strip()
         assets["scene_urls"].append(scene_url)
         assets["scene_narrations"].append(narration)
-        await _send_scene_payload(
-            ws,
-            scene_index=int(scene.get("scene_number", 0) or 0),
-            scene_url=scene_url,
-            narration=narration,
-        )
-        await asyncio.sleep(0.25)
+        scene_number = int(scene.get("scene_number", 0) or 0)
+        if scene_number not in streamed_scene_numbers:
+            await _send_scene_payload(
+                ws,
+                scene_index=scene_number,
+                scene_url=scene_url,
+                narration=narration,
+            )
+            await asyncio.sleep(0.1)
 
     narration_path: Path | None = None
     narration_scenes = [
@@ -766,7 +794,7 @@ async def _render_interleaved_story(
             logger.warning("Narration generation failed for session %s: %s", session_id, exc)
 
     video_url = ""
-    if len(scenes) >= 5:
+    if ENABLE_VEO and len(scenes) >= 5:
         await _send_progress(ws, "Bringing the peak moment to life…", 84)
         try:
             hero_video_path = await asyncio.to_thread(
@@ -1303,15 +1331,13 @@ async def _render_story(
 
 async def handle_custom_intake(ws: WebSocket, session_id: str, user_input: str, music_preference: str) -> None:
     await _send_progress(ws, "Understanding your story…", 4)
-    setup_task = asyncio.to_thread(extract_story_setup, user_input, settings)
-    conflict_task = asyncio.to_thread(extract_conflict, user_input, settings)
-    ending_task = asyncio.to_thread(extract_ending, user_input, settings)
-    extracted_setup, conflict, ending = await asyncio.gather(setup_task, conflict_task, ending_task)
-    story_ctx: Dict[str, Any] = {}
-    story_ctx.update(extracted_setup)
-    story_ctx.update(conflict)
-    story_ctx.update(ending)
-    story_ctx["music_preference"] = _resolve_music_preference(user_input, music_preference)
+    story_ctx: Dict[str, Any] = {
+        "who": user_input,
+        "character_essence": user_input,
+        "character": user_input,
+        "character_description": user_input,
+        "music_preference": _resolve_music_preference(user_input, music_preference),
+    }
     state_store.save(session_id, {
         "current_beat": 2,
         "story_type": "custom",
@@ -1324,8 +1350,10 @@ async def handle_custom_intake(ws: WebSocket, session_id: str, user_input: str, 
 async def handle_preset_intake(ws: WebSocket, session_id: str, user_input: str, music_preference: str) -> None:
     state = state_store.load(session_id)
     story_ctx = dict(state.get("story_context", {}))
-    story_ctx.update(await asyncio.to_thread(extract_conflict, user_input, settings))
-    story_ctx.update(await asyncio.to_thread(extract_ending, user_input, settings))
+    story_ctx["turn"] = user_input
+    story_ctx["the_turn"] = user_input
+    story_ctx["remains"] = user_input
+    story_ctx["residual_feeling"] = user_input
     story_ctx["music_preference"] = _resolve_music_preference(user_input, music_preference)
     state_store.save(session_id, {
         "current_beat": 2,
@@ -1388,12 +1416,14 @@ async def handle_step1_character(ws: WebSocket, session_id: str, user_input: str
             step=1,
         )
         return
-    extracted_setup = await asyncio.to_thread(extract_emotional_setup, cleaned, settings)
     state_store.save(session_id, {
         "current_beat": 2,
         "story_type": "custom",
         "story_context": {
-            **extracted_setup,
+            "who": cleaned,
+            "character_essence": cleaned,
+            "character": cleaned,
+            "character_description": cleaned,
             "beat1_seed": cleaned,
         },
         "generated_assets": {},
@@ -1409,7 +1439,8 @@ async def handle_step1_character(ws: WebSocket, session_id: str, user_input: str
 async def handle_step2_turn(ws: WebSocket, session_id: str, user_input: str) -> None:
     state = state_store.load(session_id)
     story_ctx = dict(state.get("story_context", {}))
-    story_ctx.update(await asyncio.to_thread(extract_story_turn, user_input, settings))
+    story_ctx["turn"] = user_input
+    story_ctx["the_turn"] = user_input
     story_ctx["beat2_seed"] = user_input
 
     state_store.save(session_id, {
@@ -1427,7 +1458,8 @@ async def handle_step2_turn(ws: WebSocket, session_id: str, user_input: str) -> 
 async def handle_step3_generate(ws: WebSocket, session_id: str, user_input: str) -> None:
     state = state_store.load(session_id)
     story_ctx = dict(state.get("story_context", {}))
-    story_ctx.update(await asyncio.to_thread(extract_residual_emotion, user_input, settings))
+    story_ctx["remains"] = user_input
+    story_ctx["residual_feeling"] = user_input
     story_ctx["beat3_seed"] = user_input
     state_store.save(session_id, {
         "current_beat": 3,

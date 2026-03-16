@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 import requests
 from google import genai
@@ -18,6 +19,7 @@ from generation.vertex import vertex_client_kwargs
 logger = logging.getLogger("uvicorn.error")
 INTERLEAVED_SCENE_COUNT = 6
 SCENES_WITH_NARRATION = {1, 3, 4, 5, 6}
+DEMO_PRESET_CANDIDATES = ("fisherman", "sacrifice", "blue_meadow")
 
 
 def _story_title(story_context: Dict[str, Any]) -> str:
@@ -52,33 +54,32 @@ def _story_prompt(story_context: Dict[str, Any]) -> str:
     remains = str(story_context.get("remains", story_context.get("residual_feeling", ""))).strip()
     return f"""You are CineAI, a cinematic visual storyteller.
 
-Create one intimate 6-scene story using interleaved text and images.
+Create one 6-scene visual story with interleaved narration and images.
 
-THE USER'S STORY:
-Who they love: {who}
-What changed everything: {turn}
-What feeling remains: {remains}
+Story:
+Who: {who}
+Turn: {turn}
+Remains: {remains}
 
-CHARACTER DESCRIPTION (use EXACTLY these words in every image where the character appears):
+Character description. Use these exact words whenever the character appears:
 {character_desc}
 
-Choose one thread object and keep it visually consistent in scenes 1, 4, and 6.
+Choose one thread object and show it in scenes 1, 4, and 6.
 
-NARRATION RULES:
+Rules:
 - First person "I" voice only.
 - 5-12 words maximum per narration line.
-- Sparse. Poetic. One breath.
 - Scene 2 must have no narration.
-- Scene 6 is the final line.
-- Do not explain. Do not summarize. Do not use labels.
-
-IMAGE RULES:
+- Scenes 1, 4, and 6 are close-up hands.
+- Scene 2 is wide and silent.
+- Scene 3 is medium from behind or profile.
+- Scene 5 is the emotional peak.
 - Every image must be cinematic 16:9 and photorealistic.
 - Warm earth tones, soft natural light, shallow depth of field, gentle film grain.
 - When the character appears, use the exact character description above.
 - Show only hands, silhouette, back, profile, or over-the-shoulder views.
 - Never show a clear frontal face with both eyes visible.
-- One subject, one action, one moment per image.
+- Keep one subject and one clear action per image.
 
 Return the story in this exact sequence:
 1. Scene 1 narration text.
@@ -108,23 +109,97 @@ def _clean_text_block(text: str) -> List[str]:
     return [block for block in blocks if block]
 
 
+def load_demo_story(
+    story_context: Dict[str, Any],
+    output_dir: Path,
+) -> Dict[str, Any]:
+    demo_root = Path(__file__).resolve().parents[1] / "app" / "static" / "demo_presets"
+    preferred = str(story_context.get("preset_name", "")).strip().lower()
+    candidates = [preferred] if preferred else []
+    candidates.extend([name for name in DEMO_PRESET_CANDIDATES if name not in candidates])
+
+    chosen_dir: Path | None = None
+    for name in candidates:
+        demo_dir = demo_root / name
+        if (demo_dir / "manifest.json").exists():
+            chosen_dir = demo_dir
+            break
+    if chosen_dir is None:
+        raise RuntimeError("No cached demo story is available.")
+
+    manifest = json.loads((chosen_dir / "manifest.json").read_text(encoding="utf-8"))
+    scenes: List[Dict[str, Any]] = []
+    story_parts: List[Dict[str, Any]] = []
+    scene_narrations = list(manifest.get("scene_narrations", []) or [])
+
+    for scene_index in range(1, INTERLEAVED_SCENE_COUNT + 1):
+        source_path = chosen_dir / "scenes" / f"scene_{scene_index:02d}.png"
+        dest_path = output_dir / f"scene_{scene_index:02d}.png"
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, dest_path)
+        narration = str(scene_narrations[scene_index - 1]).strip() if scene_index - 1 < len(scene_narrations) else ""
+        if narration:
+            story_parts.append({"type": "narration", "text": narration})
+        story_parts.append(
+            {
+                "type": "image",
+                "scene_index": scene_index,
+                "path": str(dest_path),
+                "mime_type": "image/png",
+            }
+        )
+        scenes.append(
+            {
+                "scene_number": scene_index,
+                "narration": narration,
+                "image_path": str(dest_path),
+                "mime_type": "image/png",
+            }
+        )
+
+    result = {
+        "title": str(manifest.get("title", _story_title(story_context))).strip() or _story_title(story_context),
+        "character_description": _character_description(story_context),
+        "story_parts": story_parts,
+        "scenes": scenes,
+        "prompt": "cached-demo-fallback",
+        "narration_lines": [scene["narration"] for scene in scenes if scene.get("narration")],
+        "fallback": True,
+        "fallback_source": chosen_dir.name,
+    }
+    (output_dir / "interleaved_story.json").write_text(
+        json.dumps(result, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return result
+
+
 def generate_interleaved_story(
     story_context: Dict[str, Any],
     settings: Settings,
     output_dir: Path,
+    scene_callback: Callable[[Dict[str, Any]], None] | None = None,
 ) -> Dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     client = genai.Client(**vertex_client_kwargs(settings))
     prompt = _story_prompt(story_context)
-    response = client.models.generate_content(
-        model=settings.conversation_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_modalities=[types.Modality.TEXT, types.Modality.IMAGE],
-            temperature=0.8,
-            image_config=types.ImageConfig(aspect_ratio="16:9"),
-        ),
-    )
+    try:
+        response = client.models.generate_content(
+            model=settings.conversation_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=[types.Modality.TEXT, types.Modality.IMAGE],
+                temperature=0.8,
+                image_config=types.ImageConfig(aspect_ratio="16:9"),
+            ),
+        )
+    except Exception as exc:
+        logger.warning("Interleaved story generation failed, using cached demo fallback. (%s)", exc)
+        result = load_demo_story(story_context, output_dir)
+        if scene_callback is not None:
+            for scene in result["scenes"]:
+                scene_callback(dict(scene))
+        return result
 
     parts = getattr(getattr((response.candidates or [None])[0], "content", None), "parts", None) or []
     story_parts: List[Dict[str, Any]] = []
@@ -165,6 +240,8 @@ def generate_interleaved_story(
                 "mime_type": mime_type,
             }
         )
+        if scene_callback is not None:
+            scene_callback(dict(scenes[-1]))
 
     result = {
         "title": _story_title(story_context),
@@ -174,6 +251,13 @@ def generate_interleaved_story(
         "prompt": prompt,
         "narration_lines": [scene["narration"] for scene in scenes if scene.get("narration")],
     }
+    if not scenes:
+        logger.warning("Interleaved story response was empty, using cached demo fallback.")
+        result = load_demo_story(story_context, output_dir)
+        if scene_callback is not None:
+            for scene in result["scenes"]:
+                scene_callback(dict(scene))
+        return result
     (output_dir / "interleaved_story.json").write_text(
         json.dumps(result, indent=2, ensure_ascii=False),
         encoding="utf-8",

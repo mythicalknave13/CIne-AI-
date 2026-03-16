@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import os
 import random
 import threading
 import time
@@ -103,16 +104,8 @@ def call_with_retry(
 
 
 def vertex_client_kwargs(settings: Settings) -> dict[str, object]:
-    if settings.gemini_api_key:
-        return {
-            "api_key": settings.gemini_api_key,
-        }
-    if not settings.gcp_project_id:
-        raise ValueError("GCP_PROJECT_ID is required for Vertex AI generation.")
     return {
-        "vertexai": True,
-        "project": settings.gcp_project_id,
-        "location": vertex_genai_location(settings),
+        "api_key": settings.gemini_api_key or os.getenv("GEMINI_API_KEY", ""),
     }
 
 

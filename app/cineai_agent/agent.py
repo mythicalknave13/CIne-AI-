@@ -15,11 +15,7 @@ _current_session_id: str = ""
 
 if settings.gemini_api_key:
     os.environ.setdefault("GOOGLE_API_KEY", settings.gemini_api_key)
-    os.environ.pop("GOOGLE_GENAI_USE_VERTEXAI", None)
-elif settings.gcp_project_id:
-    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "true")
-    os.environ.setdefault("GOOGLE_CLOUD_PROJECT", settings.gcp_project_id)
-    os.environ.setdefault("GOOGLE_CLOUD_LOCATION", settings.gcp_location)
+os.environ.pop("GOOGLE_GENAI_USE_VERTEXAI", None)
 
 from google.adk.agents import Agent
 from google.cloud import firestore
