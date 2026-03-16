@@ -67,6 +67,11 @@ from generation.scenes import (
     generate_single_scene,
     generate_scene_batch_interleaved,
 )
+from generation.story import (
+    INTERLEAVED_SCENE_COUNT,
+    generate_hero_video,
+    generate_interleaved_story,
+)
 from generation.veo_scenes import generate_all_veo_scenes
 from generation.video import assemble_video, create_black_card, create_ken_burns_clip
 
@@ -254,6 +259,13 @@ async def _send_character(ws: WebSocket, session_id: str) -> None:
 async def _send_character_url(ws: WebSocket, character_url: str) -> None:
     try:
         await ws.send_json({"type": "character_generated", "character_url": character_url})
+    except Exception:
+        pass
+
+
+async def _send_audio_ready(ws: WebSocket, audio_url: str) -> None:
+    try:
+        await ws.send_json({"type": "audio_ready", "audio_url": audio_url})
     except Exception:
         pass
 
@@ -648,6 +660,165 @@ async def _serve_demo_preset(
         demo_preset=True,
     )
     return True
+
+
+async def _render_interleaved_story(
+    ws: WebSocket,
+    session_id: str,
+    story_ctx: Dict[str, Any],
+    *,
+    story_type: str,
+) -> None:
+    render_start = time.perf_counter()
+    session_dir = STATIC_DIR / "generated" / session_id
+    scenes_dir = session_dir / "scenes"
+    audio_dir = session_dir / "audio"
+    video_dir = session_dir / "video"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    story_title = _story_title(story_ctx)
+
+    await _send_assistant(ws, "I have what I need. Let me make your story.", step=3)
+    await _generate_character_background(ws, session_id, story_ctx)
+
+    try:
+        (session_dir / "story_context.json").write_text(
+            json.dumps(story_ctx, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception as exc:
+        logger.warning("Failed to persist story context for session %s: %s", session_id, exc)
+
+    await _send_progress(ws, "Imagining the story world…", 30)
+    interleaved = await asyncio.to_thread(
+        generate_interleaved_story,
+        {
+            **story_ctx,
+            "title": story_title,
+            "who": str(story_ctx.get("character_essence", story_ctx.get("who", ""))).strip(),
+            "turn": str(story_ctx.get("the_turn", story_ctx.get("turn", ""))).strip(),
+            "remains": str(story_ctx.get("residual_feeling", story_ctx.get("remains", ""))).strip(),
+        },
+        settings,
+        scenes_dir,
+    )
+
+    scenes = list(interleaved.get("scenes", []) or [])[:INTERLEAVED_SCENE_COUNT]
+    if not scenes:
+        raise ValueError("Gemini did not return any story images.")
+
+    assets: Dict[str, Any] = {
+        "scene_urls": [],
+        "scene_narrations": [],
+    }
+
+    await _send_progress(ws, "Streaming your story…", 55)
+    for scene in scenes:
+        scene_path = Path(str(scene.get("image_path", "")))
+        scene_url = _versioned_static_url(
+            f"/static/generated/{session_id}/scenes/{scene_path.name}",
+            scene_path,
+        )
+        narration = str(scene.get("narration", "")).strip()
+        assets["scene_urls"].append(scene_url)
+        assets["scene_narrations"].append(narration)
+        await _send_scene_payload(
+            ws,
+            scene_index=int(scene.get("scene_number", 0) or 0),
+            scene_url=scene_url,
+            narration=narration,
+        )
+        await asyncio.sleep(0.25)
+
+    narration_path: Path | None = None
+    narration_scenes = [
+        {
+            "scene_number": idx,
+            "narration": str(scene.get("narration", "")).strip(),
+            "narrator_profile": str(story_ctx.get("narrator_profile", "older_memory")).strip() or "older_memory",
+        }
+        for idx, scene in enumerate(scenes, start=1)
+    ]
+    if any(
+        str(scene.get("narration", "")).strip()
+        and str(scene.get("narration", "")).strip().lower() != "[silence]"
+        for scene in scenes
+    ):
+        await _send_progress(ws, "Recording the voiceover…", 72)
+        try:
+            narration_path = await asyncio.to_thread(
+                create_narration_audio,
+                scenes=narration_scenes,
+                settings=settings,
+                output_dir=audio_dir,
+                intro_text="",
+                intro_duration_seconds=0.0,
+                scene_duration_seconds=6.0,
+                total_duration_seconds=max(24.0, len(scenes) * 6.0),
+                preserve_intro_length=False,
+            )
+            narration_url = _versioned_static_url(
+                f"/static/generated/{session_id}/audio/{narration_path.name}",
+                narration_path,
+            )
+            await _send_audio_ready(ws, narration_url)
+            assets["audio_url"] = narration_url
+        except Exception as exc:
+            logger.warning("Narration generation failed for session %s: %s", session_id, exc)
+
+    video_url = ""
+    if len(scenes) >= 5:
+        await _send_progress(ws, "Bringing the peak moment to life…", 84)
+        try:
+            hero_video_path = await asyncio.to_thread(
+                generate_hero_video,
+                story_ctx,
+                scenes[4],
+                settings,
+                video_dir / "hero_video.mp4",
+            )
+            if hero_video_path and Path(hero_video_path).exists():
+                video_url = _versioned_static_url(
+                    f"/static/generated/{session_id}/video/{Path(hero_video_path).name}",
+                    Path(hero_video_path),
+                )
+                await ws.send_json({
+                    "type": "film_ready",
+                    "video_url": video_url,
+                    "storyboard_url": None,
+                    "video_title": f"{story_title} — Hero Scene",
+                    "video_subtitle": "One Veo scene at the emotional peak.",
+                })
+        except Exception as exc:
+            logger.warning("Hero video generation failed for session %s: %s", session_id, exc)
+
+    state_store.save(session_id, {
+        "current_beat": 6,
+        "story_type": story_type,
+        "story_context": story_ctx,
+        "generated_assets": assets,
+        "video_url": video_url,
+    })
+
+    await _send_progress(ws, "Story ready ✓", 100)
+    residual_feeling = re.sub(r"\s+", " ", str(story_ctx.get("residual_feeling", "")).strip())
+    closing_line = (
+        f"Your story is ready. {residual_feeling}. Scroll through it."
+        if residual_feeling
+        else "Your story is ready. Scroll through it."
+    )
+    await _send_assistant(
+        ws,
+        closing_line,
+        film_ready=bool(video_url),
+        step=6,
+    )
+    logger.info(
+        "TIMING render_interleaved_story complete total=%.2fs session=%s scenes=%d hero_video=%s",
+        time.perf_counter() - render_start,
+        session_id,
+        len(scenes),
+        bool(video_url),
+    )
 
 
 async def _render_story(
@@ -1147,7 +1318,7 @@ async def handle_custom_intake(ws: WebSocket, session_id: str, user_input: str, 
         "story_context": story_ctx,
         "generated_assets": {},
     })
-    await _render_story(ws, session_id, story_ctx, story_type="custom")
+    await _render_interleaved_story(ws, session_id, story_ctx, story_type="custom")
 
 
 async def handle_preset_intake(ws: WebSocket, session_id: str, user_input: str, music_preference: str) -> None:
@@ -1162,7 +1333,7 @@ async def handle_preset_intake(ws: WebSocket, session_id: str, user_input: str, 
         "story_context": story_ctx,
         "generated_assets": {},
     })
-    await _render_story(ws, session_id, story_ctx, story_type="preset")
+    await _render_interleaved_story(ws, session_id, story_ctx, story_type="preset")
 
 
 # ── Three-Beat Conversation Flow ────────────────────────────────────
@@ -1262,7 +1433,7 @@ async def handle_step3_generate(ws: WebSocket, session_id: str, user_input: str)
         "current_beat": 3,
         "story_context": story_ctx,
     })
-    await _render_story(
+    await _render_interleaved_story(
         ws,
         session_id,
         story_ctx,

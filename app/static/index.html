@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="CineAI Director — AI-powered cinematic film generation" />
+  <title>CineAI Director</title>
+  <link rel="stylesheet" href="/static/css/style.css?v=20260316a" />
+</head>
+
+<body>
+  <main class="layout">
+    <!-- Left Panel: Chat -->
+    <section class="panel chat-panel">
+      <h1>CineAI Director</h1>
+
+      <div class="beat-tracker" id="beat-tracker">
+        <span class="beat active" data-beat="1">1 · Who We Love</span>
+        <span class="beat-arrow">→</span>
+        <span class="beat" data-beat="2">2 · The Turn</span>
+        <span class="beat-arrow">→</span>
+        <span class="beat" data-beat="3">3 · What Remains</span>
+      </div>
+
+      <div class="presets" id="presets">
+        <button class="preset" data-preset="sacrifice">🗡️ The Father's Sacrifice</button>
+        <button class="preset" data-preset="blue_meadow">🐜 The Great Green Shadows</button>
+        <button class="preset" data-preset="escape">🌃 The Escape</button>
+        <button class="preset" data-preset="discovery">🐉 The Discovery</button>
+      </div>
+
+      <div id="chat" class="chat"></div>
+
+      <div id="progress" class="progress" hidden>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <p id="progress-text" class="progress-text">Preparing…</p>
+      </div>
+
+      <form id="chat-form" class="chat-form">
+        <input id="message" type="text" placeholder="Tell me about someone…" autocomplete="off" />
+        <button id="mic-button" class="mic-button" type="button" aria-label="Use voice input" title="Use voice input">🎙️</button>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <!-- Right Panel: Media -->
+    <section class="panel media">
+      <h2>🎬 Your Story</h2>
+
+      <div id="character-section" class="character-section" hidden>
+        <h3>Story Card</h3>
+        <img id="character-img" alt="Character Reference" />
+      </div>
+
+      <div id="story-stream" class="story-stream"></div>
+
+      <div id="audio-container" class="audio-container" hidden>
+        <p class="audio-label">Narration</p>
+        <audio id="narration-player" controls preload="metadata"></audio>
+      </div>
+
+      <div id="video-container" hidden>
+        <video id="film-player" controls preload="metadata"></video>
+        <p id="video-title" class="video-title"></p>
+        <p id="video-subtitle" class="video-subtitle"></p>
+        <div id="asset-actions" class="asset-actions" hidden>
+          <a id="open-video-link" class="asset-link" href="#" target="_blank" rel="noopener">Open video</a>
+          <a id="open-storyboard-link" class="asset-link" href="#" target="_blank" rel="noopener">Open storyboard PDF</a>
+        </div>
+      </div>
+
+      <div id="media-placeholder" class="media-placeholder">
+        <div class="icon">🎞️</div>
+        <div class="label">Your story will appear here</div>
+        <div class="sublabel">A live stream of narration, images, and one hero video.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/app.js?v=20260316a"></script>
+</body>
+
+</html>
