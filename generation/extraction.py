@@ -827,9 +827,9 @@ What remains: {story_context.get('residual_feeling', '')}
 
 Write a PHYSICAL DESCRIPTION of the main character in exactly 40 words. This description will be copy-pasted into every scene prompt to maintain consistency.
 
-Include: approximate age (must be 25+), one facial feature, one hair detail, one clothing item with a color, one distinctive physical detail (scars, stains, jewelry, tattoo, glasses).
+Include: approximate age (must be 25+), ETHNICITY OR SKIN TONE explicitly, one facial feature, one hair detail, one clothing item with a color, one distinctive physical detail (scars, stains, jewelry, tattoo, glasses).
 
-Example: "a weathered man in his early 50s with a short dark beard flecked with gray, kind brown eyes, wearing a sand-colored linen tunic with ink stains on the cuffs, strong gentle hands"
+Example: "a South Asian man in his early 50s with deep brown skin, a short dark beard flecked with gray, kind brown eyes, wearing a sand-colored linen tunic with ink stains on the cuffs, strong calloused hands"
 
 ═══ STEP 2: THREAD OBJECT ═══
 
@@ -884,6 +884,29 @@ E) veo_prompt: Follow this EXACT formula —
    - Total prompt: 60-100 words
    - Scene 7 must have NO PERSON in frame — only objects, space, light
    - Scene 8 must MIRROR Scene 1's shot type and framing
+
+   LOCATION ANCHORING RULES:
+   - Define ONE primary location and return to it in scenes 1, 4, and 8
+   - Scene 1 and Scene 8 must happen in the SAME place with the SAME camera angle
+   - Scene 2 must show the wider version of Scene 1's location
+   - Scenes can leave the primary location for scenes 3, 5, and 6 only
+   - Scene 7 is ALWAYS an empty space with no person
+   - The thread object must be visible in scenes 1, 4, 5, and 8
+
+   SHOT PROGRESSION RULES:
+   - Scene 1: close-up or medium close-up
+   - Scene 2: wide or aerial
+   - Scene 3: medium shot
+   - Scene 4: close-up of hands doing something
+   - Scene 5: medium shot
+   - Scene 6: wide or environmental
+   - Scene 7: static wide shot, no person
+   - Scene 8: SAME framing as Scene 1
+
+   SETTING ANCHORING:
+   - Choose a specific time of day and weather for the whole film
+   - All 8 scenes happen in the same conditions unless the story clearly demands a time change
+   - Put that same time-of-day and weather detail into every veo_prompt
 
 F) image_prompt: A single-frame version of the veo_prompt for Ken Burns fallback if Veo fails. 30-40 words.
 
@@ -1029,37 +1052,56 @@ def generate_emotional_script(story_context: Dict[str, Any], settings: Settings)
     return list(generate_film_blueprint(story_context, settings).get("scenes", []))
 
 
-def enforce_character_bible(blueprint: Dict[str, Any], scene: Dict[str, Any]) -> str:
-    """Ensure the character bible and visual style anchor appear verbatim in scene prompts."""
+def _enforce_character_bible_prompt(blueprint: Dict[str, Any], scene: Dict[str, Any]) -> str:
     bible = re.sub(r"\s+", " ", str(blueprint.get("character_bible", "")).strip())
     style = re.sub(r"\s+", " ", str(blueprint.get("visual_style_anchor", "")).strip())
     prompt = re.sub(r"\s+", " ", str(scene.get("veo_prompt", "")).strip())
     if not prompt:
         return prompt
 
-    if bool(scene.get("has_character", False)) and bible and bible not in prompt:
-        first_period = prompt.find(".")
-        if first_period > 0:
-            camera_part = prompt[:first_period + 1].strip()
-            rest = prompt[first_period + 1:].strip()
-            if rest:
-                prompt = f"{camera_part} {bible}. {rest}"
-            else:
-                prompt = f"{camera_part} {bible}."
+    if not bool(scene.get("has_character", False)):
+        if style and style not in prompt:
+            prompt = prompt.rstrip(". ") + ". " + style
+        if "no text" not in prompt.lower():
+            prompt += " No text, no subtitles, no logos, no title cards."
+        return re.sub(r"\s+", " ", prompt).strip()
+
+    if bible:
+        parts = prompt.split(".", 1)
+        camera = parts[0].strip() + "."
+        rest = parts[1].strip() if len(parts) > 1 else ""
+        rest_sentences = [sentence.strip() for sentence in rest.split(".") if sentence.strip()]
+        if len(rest_sentences) > 1:
+            action_and_rest = ". ".join(rest_sentences[1:])
         else:
-            prompt = f"{bible}. {prompt}"
+            action_and_rest = ". ".join(rest_sentences)
+        if action_and_rest:
+            prompt = f"{camera} {bible}. {action_and_rest}"
+        else:
+            prompt = f"{camera} {bible}."
 
     if style and style not in prompt:
-        if "Audio:" in prompt:
-            before_audio, after_audio = prompt.split("Audio:", 1)
-            prompt = f"{before_audio.strip()} {style}. Audio:{after_audio.strip()}"
-        else:
-            prompt = f"{prompt} {style}."
+        prompt = prompt.rstrip(". ") + ". " + style
 
     if "no text" not in prompt.lower():
         prompt = f"{prompt} No text, no subtitles, no logos, no title cards."
 
     return re.sub(r"\s+", " ", prompt).strip()
+
+
+def enforce_character_bible(blueprint: Dict[str, Any], scene: Dict[str, Any] | None = None) -> Dict[str, Any] | str:
+    """Enforce the exact character bible across a whole blueprint or a single scene prompt."""
+    if scene is not None:
+        return _enforce_character_bible_prompt(blueprint, scene)
+
+    scenes = blueprint.get("scenes", [])
+    if not isinstance(scenes, list):
+        return blueprint
+
+    for item in scenes:
+        if isinstance(item, dict):
+            item["veo_prompt"] = _enforce_character_bible_prompt(blueprint, item)
+    return blueprint
 
 
 def _safe_alternative_for_scene(scene: Dict[str, Any]) -> str:

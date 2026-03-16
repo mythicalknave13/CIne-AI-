@@ -674,6 +674,7 @@ async def _render_story(
         dict(story_ctx),
         settings,
     )
+    blueprint = enforce_character_bible(blueprint)
     full_script = [
         dict(scene)
         for scene in list(blueprint.get("scenes", []) or [])[:settings.scene_count]
@@ -719,7 +720,7 @@ async def _render_story(
         scene_data["narration_lead_in_seconds"] = float(
             scene_data.get("narration_pause_before", scene_data.get("narration_lead_in_seconds", 0.5)) or 0.5
         )
-        scene_data["veo_prompt"] = enforce_character_bible(blueprint, scene_data)
+        scene_data["veo_prompt"] = str(scene_data.get("veo_prompt", "")).strip()
     logger.info(
         "TIMING stage blueprint total=%.2fs story_type=%s session=%s",
         time.perf_counter() - script_stage_start,
